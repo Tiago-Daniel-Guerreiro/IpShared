@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Cliente-Cliente/Cliente-Cliente.csproj" />
+  <Project Path="IpShared/IpShared.shproj" />
+</Solution>
