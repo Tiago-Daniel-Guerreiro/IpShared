@@ -26,34 +26,16 @@ public static class SimpleLogger
     {
         _buffer.Add(logEntry);
 
-        if (!File.Exists(_logFilePath))
-            File.Create(_logFilePath);
-
         if (_buffer.Count >= BufferCapacity)
         {
 
             bool writtenSuccessfully = false;
             while (!writtenSuccessfully)
             {
-                Flush();
-            }
-
-            if (writtenSuccessfully)
-                _buffer.Clear();
-        }
-    }
-    public static void Flush()
-    {
-        if (_buffer.Count > 0)
-        {
-            // Este bloco de código é quase uma cópia do que está no 'Add'
-            bool writtenSuccessfully = false;
-            while (!writtenSuccessfully)
-            {
                 try
                 {
-                    // Usa AppendAllLines para criar o ficheiro se não existir
                     File.AppendAllLines(_logFilePath, _buffer);
+
                     writtenSuccessfully = true;
                 }
                 catch (IOException)
@@ -70,25 +52,6 @@ public static class SimpleLogger
 
             if (writtenSuccessfully)
                 _buffer.Clear();
-        }
-    }
-
-    public static void AllLines()
-    {
-        // Antes de ler, garante que tudo foi escrito no ficheiro
-        Flush();
-
-        // Agora podemos ler com segurança
-        if (!File.Exists(_logFilePath))
-        {
-            Console.WriteLine("Ficheiro de log não encontrado (provavelmente não foram gerados logs suficientes para criar o ficheiro).");
-            return;
-        }
-
-        string[] lines = File.ReadAllLines(_logFilePath);
-        foreach (var line in lines)
-        {
-            Console.WriteLine(line);
         }
     }
 }
@@ -123,7 +86,7 @@ public static class Program_V3
         if (Teste("0.0.0.0", 0))
             erros++;
 
-        SimpleLogger.Add("Valor mais alto: ");
+        Console.Write("Valor mais alto: ");
         if (Teste("255.255.255.255", ushort.MaxValue,15))
             erros++;
 
@@ -173,8 +136,6 @@ public static class Program_V3
 
         var (decodedIp, decodedPort, decodedId) = _defaultEncoder.Decode(encoded);
         SimpleLogger.Add($"\t{encoded} = {decodedIp}:{decodedPort} (ID: {decodedId})");
-
-        SimpleLogger.AllLines();
     }
 
     public static bool Teste(string ipStr, ushort port, int listId = 0)
@@ -265,12 +226,11 @@ public class WordEncoder
         List<int> indices = BitArrayUtils.ToInts(chunks);
 
         string[] wordList = _wordLists[listId];
-        List<string> outputWords = new();
+        List<string> outputWords = new(indices.Count);
 
         foreach (int indice in indices)
-        {
-            outputWords.Add(wordList[indice]);
-        }
+            outputWords[indice] = wordList[indice];
+
         // Aplica os "metadados" do id e do "resto" dos bits da porta
         BitArray idBits = new([listId]) { Length = _config.IdBitCount };
         ApplyMetadata(outputWords, idBits, portMetadataBits);
@@ -292,18 +252,18 @@ public class WordEncoder
         // Reconstroi os 45 bits da mensagem
 
         string[] wordList = _wordLists[listId];
+        List<BitArray> bitChunks = new(encodedWords.Length-1);
 
-        List<BitArray> bitChunks = new();
-
-        for (int indice_word = 0; indice_word < encodedWords.Length; indice_word++)
+        for (int indice_word = 0; indice_word < encoded.Length; indice_word++)
         {
             int index = Array.IndexOf(wordList, encodedWords[indice_word].ToLowerInvariant());
 
             if (index == -1)
                 throw new KeyNotFoundException($"Palavra '{encodedWords[indice_word]}' não encontrada.");
 
-            bitChunks.Add(new BitArray([index]) { Length = _config.ChunkBitCount });
+            bitChunks[indice_word] = new BitArray([index]) { Length = _config.ChunkBitCount };
         }
+
         BitArray? logicalBits = BitArrayUtils.Concatenate(bitChunks.ToArray());
         BitArray? mainDataBits = BitArrayUtils.Reverse(logicalBits); // Volta para a ordem do BitArray, maior no fim
 
@@ -391,9 +351,10 @@ public class WordEncoder
 
     private (BitArray idBits, BitArray portMetadataBits) ExtractMetadata(string[] words)
     {
-        // Extrai os bits do ID
+        // Extrai os bits do ID diretamente.
         BitArray idBits = new(_config.IdBitCount);
-        if (idBits.Length <= words.Length)
+
+        if(idBits.Length <= words.Length)
         {
             for (int i = 0; i < idBits.Length; i++)
             {
@@ -401,17 +362,15 @@ public class WordEncoder
             }
         }
 
-        // Extrai os bits da Porta
         BitArray portMetadataBits = new(_config.PortMetadataBitCount);
         string lastWord = words.Last();
 
-        if (lastWord.Length >= portMetadataBits.Length)
+        if(lastWord.Length < portMetadataBits.Length)
         {
-            // O BitArray 'portMetadataBits' armazena os bits da porta na ordem [bit 13, bit 14, bit 15]
-            // Cada um corresponde a um caractere da última palavra na ordem [char 0, char 1, char 2]
+            // O BitArray 'portMetadataBits' contém os bits da porta na ordem [13, 14, 15]
             for (int indice_port_bit = 0; indice_port_bit < portMetadataBits.Length; indice_port_bit++)
             {
-                portMetadataBits[indice_port_bit] = char.IsUpper(lastWord[indice_port_bit]);
+                portMetadataBits[indice_port_bit] = char.IsUpper(lastWord[1]);
             }
         }
 
