@@ -3,16 +3,19 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>Cliente_Cliente</RootNamespace>
+    <RootNamespace>IpShared</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyTitle>IpShared</AssemblyTitle>
   </PropertyGroup>
 
-  <Import Project="..\IpShared\IpShared.projitems" Label="Shared" />
-
   <ItemGroup>
-    <None Remove="Resources\Words_0.txt" />
+    <Compile Remove="Ip_Word_Enconder_Versao_antiga.cs" />
   </ItemGroup>
+
+  <PropertyGroup>
+	  <PublishSingleFile>true</PublishSingleFile>
+  </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="QRCoder" Version="1.7.0" />
@@ -24,60 +27,60 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Resources\Words_17.txt">
+    <Content Include="Resources\Words_17.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_16.txt">
+    </Content>
+    <Content Include="Resources\Words_16.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_15.txt">
+    </Content>
+    <Content Include="Resources\Words_15.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_14.txt">
+    </Content>
+    <Content Include="Resources\Words_14.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_13.txt">
+    </Content>
+    <Content Include="Resources\Words_13.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_12.txt">
+    </Content>
+    <Content Include="Resources\Words_12.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_5.txt">
+    </Content>
+    <Content Include="Resources\Words_5.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_4.txt">
+    </Content>
+    <Content Include="Resources\Words_4.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_1.txt">
+    </Content>
+    <Content Include="Resources\Words_1.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_2.txt">
+    </Content>
+    <Content Include="Resources\Words_10.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_3.txt">
+    </Content>
+    <Content Include="Resources\Words_2.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_7.txt">
+    </Content>
+    <Content Include="Resources\Words_3.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_8.txt">
+    </Content>
+    <Content Include="Resources\Words_7.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_11.txt">
+    </Content>
+    <Content Include="Resources\Words_8.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_9.txt">
+    </Content>
+    <Content Include="Resources\Words_11.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_10.txt">
+    </Content>
+    <Content Include="Resources\Words_9.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_6.txt">
+    </Content>
+    <Content Include="Resources\Words_6.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
-    <Resource Include="Resources\Words_0.txt">
+    </Content>
+    <Content Include="Resources\Words_0.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Resource>
+    </Content>
   </ItemGroup>
 
 </Project>

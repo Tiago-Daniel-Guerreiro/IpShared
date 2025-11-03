@@ -9,6 +9,7 @@
     <Import_RootNamespace>IpShared</Import_RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="$(MSBuildThisFileDirectory)IntiveGenerator.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Ip_Word_Enconder_Versao_antiga.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)WordEncoder.cs" />
   </ItemGroup>
 </Project>

@@ -61,7 +61,7 @@ public static class Program_V3
     private static WordEncoder? _defaultEncoder;
     private static readonly Random _randomGenerator = new();
 
-    public static void Main()
+    public static void Main_V3()
     {
         var defaultConfig = new WordEncoderConfig();
 
@@ -87,7 +87,7 @@ public static class Program_V3
             erros++;
 
         Console.Write("Valor mais alto: ");
-        if (Teste("255.255.255.255", ushort.MaxValue,15))
+        if (Teste("255.255.255.255", ushort.MaxValue, 15))
             erros++;
 
         Random random = new();
@@ -96,7 +96,7 @@ public static class Program_V3
             if (Teste(IpAleatorio(), PortaAleatoria(), IdAleatorio()))
                 erros++;
         }
-        
+
         // Para testar intervalos de ips/portas
         /*
             for(int indice_List=0; indice_List < 16; indice_List++)
@@ -156,7 +156,7 @@ public static class Program_V3
             if (decodedIp.Equals(ip) && decodedPort == port && decodedId == listId)
             {
                 SimpleLogger.Add($"\t{encoded} = {decodedIp}:{decodedPort} (ID: {decodedId})");
-                return false; 
+                return false;
             }
 
             Console.WriteLine($"-!- FALHA: {ipStr}:{port} | Descodificado para: {decodedIp}:{decodedPort}");
@@ -177,7 +177,8 @@ public static class Program_V3
     {
         return (ushort)_randomGenerator.Next(0, ushort.MaxValue + 1);
     }
-    public static int IdAleatorio() {
+    public static int IdAleatorio()
+    {
         return _randomGenerator.Next(0, 15);
     }
 }
@@ -191,7 +192,7 @@ public class WordEncoder
     {
         _config = config;
         _wordLists = wordLists;
-        if (_wordLists.Count == 0) 
+        if (_wordLists.Count == 0)
             throw new ArgumentException("A lista de palavras não pode estar vazia.", nameof(wordLists));
     }
 
@@ -252,7 +253,7 @@ public class WordEncoder
         // Reconstroi os 45 bits da mensagem
 
         string[] wordList = _wordLists[listId];
-        List<BitArray> bitChunks = new(encodedWords.Length-1);
+        List<BitArray> bitChunks = new(encodedWords.Length - 1);
 
         for (int indice_word = 0; indice_word < encoded.Length; indice_word++)
         {
@@ -271,7 +272,7 @@ public class WordEncoder
         BitArray? ipBits = new(_config.IpBitCount);
         BitArray? portDataBits = new(_config.PortDataBitCount);
 
-        for (int i = 0; i < _config.IpBitCount; i++) 
+        for (int i = 0; i < _config.IpBitCount; i++)
             ipBits[i] = mainDataBits[i];
 
         for (int i = 0; i < _config.PortDataBitCount; i++)
@@ -354,7 +355,7 @@ public class WordEncoder
         // Extrai os bits do ID diretamente.
         BitArray idBits = new(_config.IdBitCount);
 
-        if(idBits.Length <= words.Length)
+        if (idBits.Length <= words.Length)
         {
             for (int i = 0; i < idBits.Length; i++)
             {
@@ -365,7 +366,7 @@ public class WordEncoder
         BitArray portMetadataBits = new(_config.PortMetadataBitCount);
         string lastWord = words.Last();
 
-        if(lastWord.Length < portMetadataBits.Length)
+        if (lastWord.Length < portMetadataBits.Length)
         {
             // O BitArray 'portMetadataBits' contém os bits da porta na ordem [13, 14, 15]
             for (int indice_port_bit = 0; indice_port_bit < portMetadataBits.Length; indice_port_bit++)
@@ -379,7 +380,7 @@ public class WordEncoder
 
     private string Capitalize(string word, int charIndex)
     {
-        if (string.IsNullOrEmpty(word) || charIndex < 0 || charIndex >= word.Length) 
+        if (string.IsNullOrEmpty(word) || charIndex < 0 || charIndex >= word.Length)
             return word;
 
         char[] chars = word.ToCharArray();
@@ -416,7 +417,7 @@ public static class WordListLoader
         var max_Id = Math.Pow(2, Bits_id);
 
         var loadedLists = new List<string[]>();
-        for (int id = 0;id<max_Id; id++)
+        for (int id = 0; id < max_Id; id++)
         {
             string filePath = Path.Combine(path, $"Words_{id}.txt");
             if (!File.Exists(filePath))
@@ -458,7 +459,7 @@ public static class BitArrayUtils
     public static BitArray Reverse(BitArray source)
     {
         int length = source.Length;
-        BitArray reversed = new BitArray(length);
+        BitArray reversed = new(length);
 
         for (int i = 0; i < length; i++)
             reversed[i] = source[length - 1 - i];

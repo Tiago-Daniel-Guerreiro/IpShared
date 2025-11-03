@@ -1,230 +1,163 @@
-﻿namespace Invite_Generator;
-
+﻿namespace Invite_Generator.Refactored;
+using IpWordEncoder.Refactored;
 using QRCoder;
 using SIPSorcery.Net;
-using System.Collections;
+using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Numerics;
-using System.Resources;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using ZXing;
 using ZXing.Windows.Compatibility;
+#if ANDROID
+    using SixLabors.ImageSharp;
+    using SixLabors.ImageSharp.PixelFormats;
+    using ZXing.ImageSharp;
+#endif
 
 /// <summary>
 /// Enumeração para especificar o formato de convite desejado.
+/// Combina os formatos de ambas as versões.
 /// </summary>
 public enum InviteFormat
 {
-    Default, // 192.168.10:65535
-    Base62, // qQ3GGXa8
-    Base16, // 55F6E9B4C350
-    Human, // voto-tira-tipo-sono-seco
+    Default,      // 192.168.10.1:65535
+    Base16,       // 55F6E9B4C350 (Hexadecimal)
+    Base62,       // qQ3GGXa8
+    Human,        // palavra-seis-palavra-cinco-palavra-quatro (Reversível)
     QrCodeBase64, // Imagem PNG do QR Code em Base64
-    Unknown // Adicionado para casos em que o formato não pode ser determinado
+    Unknown       // Formato não reconhecido
 }
 
 /// <summary>
-/// Gere e gere convites de conexão baseados no IP público do dispositivo.
+/// Define o contrato para um conversor de convites.
+/// Cada conversor é responsável por um formato específico.
 /// </summary>
-public class InviteGenerator
+public interface IInviteConverter
 {
-    // DTO interno para armazenar os resultados gerados.
-    private class ConnectionInvite
+    /// <summary>
+    /// O formato que este conversor manipula.
+    /// </summary>
+    InviteFormat Format { get; }
+
+    /// <summary>
+    /// Verifica se uma string de convite corresponde ao formato deste conversor.
+    /// </summary>
+    /// <param name="inviteCode">O código do convite a ser verificado.</param>
+    /// <returns>True se o formato corresponder, caso contrário, false.</returns>
+    bool IsFormat(string inviteCode);
+
+    /// <summary>
+    /// Codifica um endereço IP e porta para o formato de string deste conversor.
+    /// </summary>
+    /// <param name="ip">O endereço IP.</param>
+    /// <param name="port">A porta.</param>
+    /// <returns>A string do convite codificada.</returns>
+    string Encode(IPAddress ip, ushort port);
+
+    /// <summary>
+    /// Decodifica uma string de convite para um endereço IP e porta.
+    /// </summary>
+    /// <param name="inviteCode">A string do convite a ser decodificada.</param>
+    /// <returns>Uma tupla contendo o IPAddress e a porta.</returns>
+    (IPAddress ip, ushort port) Decode(string inviteCode);
+}
+
+
+
+/// <summary>
+/// Conversor para o formato padrão "IP:Porta".
+/// Ex: "127.0.0.1:50000"
+/// </summary>
+public class DefaultConverter : IInviteConverter
+{
+    private static readonly Regex FormatRegex = new(@"^(\d{1,3}(\.\d{1,3}){3}):(\d{1,5})$", RegexOptions.Compiled);
+    public InviteFormat Format => InviteFormat.Default;
+
+    public bool IsFormat(string inviteCode)
     {
-        public string DirectFormat { get; set; } = string.Empty;
-        public string Base62Format { get; set; } = string.Empty;
-        public string Base16Format { get; set; } = string.Empty;
-        public string DicewareFormat { get; set; } = string.Empty;
-        public string QrCodeBase64 { get; set; } = string.Empty;
+        var match = FormatRegex.Match(inviteCode);
+        return match.Success &&
+               IPAddress.TryParse(match.Groups[1].Value, out _) &&
+               ushort.TryParse(match.Groups[3].Value, out _);
     }
 
-    private ushort _port;
-    private IPAddress? _fixedIp;
-    private ConnectionInvite? _invite;
+    public string Encode(IPAddress ip, ushort port) => $"{ip}:{port}";
 
-    private const string StunServer = "stun.l.google.com:19302";
+    public (IPAddress ip, ushort port) Decode(string inviteCode)
+    {
+        var parts = inviteCode.Split(':');
+        return (IPAddress.Parse(parts[0]), ushort.Parse(parts[1]));
+    }
+}
+
+/// <summary>
+/// Conversor para o formato Base16 (Hexadecimal).
+/// Ex: "7F000001C350"
+/// </summary>
+public class Base16Converter : IInviteConverter
+{
+    public InviteFormat Format => InviteFormat.Base16;
+
+    public bool IsFormat(string inviteCode) => inviteCode.Length == 12 && Regex.IsMatch(inviteCode, @"^[0-9A-Fa-f]{12}$");
+
+    public string Encode(IPAddress ip, ushort port)
+    {
+        byte[] combinedBytes = InviteHelpers.IpPortToBytes(ip, port);
+        return Convert.ToHexString(combinedBytes);
+    }
+
+    public (IPAddress ip, ushort port) Decode(string inviteCode)
+    {
+        byte[] combinedBytes = Convert.FromHexString(inviteCode);
+        return InviteHelpers.BytesToIpPort(combinedBytes);
+    }
+}
+
+/// <summary>
+/// Conversor para o formato Base62.
+/// Ex: "3j2dZpT8"
+/// </summary>
+public class Base62Converter : IInviteConverter
+{
     private const string Base62Charset = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    private InviteGenerator(ushort port) => _port = port;
+    public InviteFormat Format => InviteFormat.Base62;
 
-    public static async Task<InviteGenerator> CreateAsync(ushort port)
-    {
-        var generator = new InviteGenerator(port);
-        await generator.AtualizarIp();
-        return generator;
-    }
+    public bool IsFormat(string inviteCode) => !string.IsNullOrEmpty(inviteCode) && inviteCode.All(c => Base62Charset.Contains(c));
 
-    /// <summary>
-    /// NOVO: Cria uma instância de InviteGenerator com um IP fixo, sem usar STUN.
-    /// Ideal para testes locais ou em redes controladas.
-    /// </summary>
-    /// <param name="fixedIp">O endereço IP a ser usado.</param>
-    /// <param name="port">A porta a ser usada.</param>
-    /// <returns>Uma instância de InviteGenerator pronta a usar.</returns>
-    public static InviteGenerator CreateWithFixedIp(IPAddress fixedIp, ushort port)
+    public string Encode(IPAddress ip, ushort port)
     {
-        var generator = new InviteGenerator(port)
+        byte[] data = InviteHelpers.IpPortToBytes(ip, port);
+        var number = new BigInteger(data, isUnsigned: true, isBigEndian: true);
+
+        if (number == 0) return Base62Charset[0].ToString();
+
+        var sb = new StringBuilder();
+        while (number > 0)
         {
-            _fixedIp = fixedIp
-        };
-        generator.AtualizarIpComIpFixo();
-        return generator;
-    }
-
-    public async Task AtualizarIp(int port = -1)
-    {
-        if (port != -1) _port = (ushort)port;
-
-        // Se um IP fixo foi definido, chama o método específico para ele.
-        if (_fixedIp != null)
-        {
-            AtualizarIpComIpFixo();
-            return;
+            number = BigInteger.DivRem(number, Base62Charset.Length, out var remainder);
+            sb.Insert(0, Base62Charset[(int)remainder]);
         }
-
-        IPAddress? publicIp = await GetPublicIpAsync();
-        if (publicIp == null)
-            throw new InvalidOperationException("Não foi possível obter o endereço IP público. Verifique a conexão ou firewall.");
-
-        GerarConvitesInternos(publicIp);
+        return sb.ToString();
     }
 
-    /// <summary>
-    /// NOVO: Define/atualiza os convites usando um IP fixo previamente definido.
-    /// </summary>
-    private void AtualizarIpComIpFixo()
-    {
-        if (_fixedIp == null)
-            throw new InvalidOperationException("Nenhum IP fixo foi definido. Use CreateWithFixedIp ou defina o IP manualmente.");
-
-        GerarConvitesInternos(_fixedIp);
-    }
-
-    /// <summary>
-    /// Método centralizado para gerar os formatos de convite a partir de um IP.
-    /// </summary>
-    private void GerarConvitesInternos(IPAddress ip)
-    {
-        byte[] ipBytes = ip.GetAddressBytes();
-        byte[] portBytes = BitConverter.GetBytes(_port);
-        if (BitConverter.IsLittleEndian) Array.Reverse(portBytes);
-        byte[] combinedBytes = ipBytes.Concat(portBytes).ToArray();
-
-        _invite = new ConnectionInvite
-        {
-            DirectFormat = $"{ip}:{_port}",
-            Base16Format = Convert.ToHexString(combinedBytes),
-            Base62Format = ToBase62(combinedBytes),
-            DicewareFormat = ToDiceware(Convert.ToHexString(combinedBytes)),
-            QrCodeBase64 = GenerateQrCodeBase64($"{ip}:{_port}")
-        };
-    }
-
-    public string ObterIp(InviteFormat format)
-    {
-        if (_invite == null) throw new InvalidOperationException("Os convites não foram gerados.");
-        return format switch
-        {
-            InviteFormat.Default => _invite.DirectFormat,
-            InviteFormat.Base62 => _invite.Base62Format,
-            InviteFormat.Base16 => _invite.Base16Format,
-            InviteFormat.Human => _invite.DicewareFormat,
-            InviteFormat.QrCodeBase64 => _invite.QrCodeBase64,
-            _ => throw new ArgumentOutOfRangeException(nameof(format)),
-        };
-    }
-
-
-    /// <summary>
-    /// Tenta descodificar uma string de convite, detetando automaticamente o seu formato.
-    /// </summary>
-    /// <param name="inviteCode">A string de convite a ser descodificada.</param>
-    /// <param name="decodedIpPort">O resultado da descodificação. Ficará vazio para formatos não reversíveis como 'Human'.</param>
-    /// <returns>O InviteFormat detetado, ou InviteFormat.Unknown se a descodificação falhar.</returns>
-    public static InviteFormat TryDecodeInvite(string inviteCode, out (IPAddress ip, ushort port) decodedIpPort)
-    {
-        inviteCode = inviteCode.Trim();
-        decodedIpPort = default;
-
-        //if(Is)
-        // Filtro 1: Formato Human (Diceware). O mais distinto.
-        // Ex: "flauta-escolha-fosco"
-        var dicewareParts = inviteCode.Split('-');
-        if (dicewareParts.Length == 5)
-        {
-            // O formato é identificado, mas não é reversível.
-            // Apenas retornamos o tipo.
-            return InviteFormat.Human;
-        }
-
-        // Filtro 2: Formato Default (IP:Porta). Usa Regex para precisão.
-        // Ex: "85.246.233.180:60000"
-        var defaultMatch = Regex.Match(inviteCode, @"^(\d{1,3}(\.\d{1,3}){3}):(\d{1,5})$");
-        if (defaultMatch.Success && IPAddress.TryParse(defaultMatch.Groups[1].Value, out var ip) && ushort.TryParse(defaultMatch.Groups[3].Value, out var port))
-        {
-            decodedIpPort = (ip, port);
-            return InviteFormat.Default;
-        }
-
-        // Filtro 3: Formato Base16 (Hexadecimal). Deve ter 12 caracteres hexadecimais.
-        // Ex: "55F6E9B4C350"
-        if (inviteCode.Length == 12 && Regex.IsMatch(inviteCode, @"^[0-9A-Fa-f]{12}$"))
-        {
-            try
-            {
-                decodedIpPort = DecodeBase16(inviteCode);
-                return InviteFormat.Base16;
-            }
-            catch { /* Se falhar, não é este formato. */ }
-        }
-
-        // Filtro 4: Formato Base62. Apenas caracteres alfanuméricos.
-        // Ex: "qQ3GGXa8"
-        if (Regex.IsMatch(inviteCode, @"^[0-9a-zA-Z]+$"))
-        {
-            try
-            {
-                decodedIpPort = DecodeBase62(inviteCode);
-                return InviteFormat.Base62;
-            }
-            catch { /* Se falhar, não é este formato. */ }
-        }
-
-        // Filtro 5: Formato QR Code (Base64). É uma string longa e com caracteres especiais.
-        if (IsBase64String(inviteCode))
-        {
-            try
-            {
-                var qrContent = DecodeQrCodeFromBase64(inviteCode);
-                // Chama-se a si mesmo para descodificar o conteúdo do QR Code.
-                return TryDecodeInvite(qrContent, out decodedIpPort);
-            }
-            catch { /* Se a descodificação do QR falhar, não é este formato. */ }
-        }
-
-        // Se nenhum filtro funcionar, o formato é desconhecido.
-        return InviteFormat.Unknown;
-    }
-
-    public static (IPAddress, ushort) DecodeBase16(string hex)
-    {
-        byte[] combinedBytes = Convert.FromHexString(hex);
-        return BytesToIpPort(combinedBytes);
-    }
-
-    public static (IPAddress, ushort) DecodeBase62(string base62)
+    public (IPAddress ip, ushort port) Decode(string inviteCode)
     {
         BigInteger number = 0;
-        foreach (char c in base62)
+        foreach (char c in inviteCode)
         {
             number = number * Base62Charset.Length + Base62Charset.IndexOf(c);
         }
         byte[] combinedBytes = number.ToByteArray(isUnsigned: true, isBigEndian: true);
 
+        // Garante que o array de bytes tenha 6 bytes (padding à esquerda se necessário)
         if (combinedBytes.Length < 6)
         {
             var paddedBytes = new byte[6];
@@ -232,72 +165,265 @@ public class InviteGenerator
             combinedBytes = paddedBytes;
         }
 
-        return BytesToIpPort(combinedBytes);
+        return InviteHelpers.BytesToIpPort(combinedBytes);
     }
+}
+
+/// <summary>
+/// Conversor para um formato "Humano" reversível usando 5 palavras, com e sem porta.
+/// Ex: "palavra1-palavra2-palavra3-palavra4-palavra5"
+/// </summary>
+public class WordsConverter : IInviteConverter
+{
+    // Encoders da biblioteca, um para cada cenário (com e sem porta).
+    private readonly WordEncoder _encoderWithPort;
+    private readonly WordEncoder _encoderWithoutPort;
+
     /// <summary>
-    /// Descodifica uma string Base64 de um QR Code e retorna o seu conteúdo textual.
-    /// Esta é a abordagem clássica, usando System.Drawing.Bitmap.
+    /// Inicializa uma nova instância do WordsConverter.
+    /// Este construtor carrega as listas de palavras de um diretório "Resources",
+    /// configura e instancia os encoders necessários da biblioteca IpWordEncoder.
     /// </summary>
-    /// <param name="base64QrCode">A string Base64 da imagem PNG do QR Code.</param>
-    /// <returns>O conteúdo textual do QR Code.</returns>
+    /// <exception cref="DirectoryNotFoundException">Lançada se o diretório 'Resources' não for encontrado.</exception>
+    /// <exception cref="InvalidOperationException">Lançada se nenhuma lista de palavras válida for carregada.</exception>
+    public WordsConverter()
+    {
+        // 1. Configurar o caminho para as listas de palavras.
+        // A biblioteca espera um caminho; aqui assumimos um diretório "Resources" relativo à execução.
+        string resourcePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
+        if (!Directory.Exists(resourcePath))
+        {
+            // Se o diretório não existir, lança uma exceção clara.
+            // Para usar esta classe, é preciso garantir que o diretório "Resources" com os ficheiros "Words_X.txt" exista.
+            throw new DirectoryNotFoundException($"O diretório de recursos não foi encontrado no caminho esperado: '{resourcePath}'.");
+        }
+
+        // 2. Instanciar a configuração e carregar as palavras usando o loader da biblioteca.
+        var encoderConfig = new WordEncoderConfig();
+        List<string[]> wordLists = WordListLoader.LoadFromDirectory(resourcePath, encoderConfig.DictionaryWordCount);
+
+        if (wordLists.Count == 0)
+        {
+            throw new InvalidOperationException("Nenhuma lista de palavras válida foi carregada. Verifique o conteúdo do diretório 'Resources'.");
+        }
+
+        // 3. Criar os mapas de palavras (word -> index) conforme a lógica da biblioteca.
+        ReadOnlyCollection<Dictionary<string, int>> wordMaps = wordLists.Select(list =>
+            list.Select((word, index) => new { word, index })
+                .ToDictionary(item => item.word, item => item.index, StringComparer.InvariantCultureIgnoreCase)
+        ).ToList().AsReadOnly();
+
+        // 4. Instanciar as duas estratégias de codificação da biblioteca.
+        var ipPortStrategy = new IpAndPortEncodingStrategy(encoderConfig, wordLists, wordMaps);
+        var ipOnlyStrategy = new IpOnlyEncodingStrategy(wordLists, wordMaps);
+
+        // 5. Guardar uma instância do WordEncoder para cada estratégia.
+        _encoderWithPort = new WordEncoder(ipPortStrategy);
+        _encoderWithoutPort = new WordEncoder(ipOnlyStrategy);
+    }
+
+    public InviteFormat Format => InviteFormat.Human;
+
     /// <summary>
-    /// Descodifica uma string Base64 de um QR Code e retorna o seu conteúdo textual.
-    /// Usa diretivas de compilação para ser multiplataforma.
+    /// Verifica se a string de convite tem o formato básico esperado (5 palavras separadas por hífen).
+    /// Esta é uma verificação rápida para evitar exceções desnecessárias no método Decode.
     /// </summary>
-    /// <param name="base64QrCode">A string Base64 da imagem PNG do QR Code.</param>
-    /// <returns>O conteúdo textual do QR Code.</returns>
-    public static string DecodeQrCodeFromBase64(string base64QrCode)
+    public bool IsFormat(string inviteCode)
     {
-        byte[] qrCodeBytes = Convert.FromBase64String(base64QrCode);
+        if (string.IsNullOrWhiteSpace(inviteCode))
+            return false;
 
-        // Declara a variável 'result' fora dos blocos para que seja acessível no final.
-        Result? result;
-
-#if ANDROID
-        // --- Caminho para Android (e outras plataformas não-Windows) usando ImageSharp ---
-        using (var memoryStream = new MemoryStream(qrCodeBytes))
-        using (var image = Image.Load<L8>(memoryStream))
-        {
-            var reader = new BarcodeReader<L8>();
-            result = reader.Decode(image);
-        }
-#else
-        // --- Caminho para Windows usando System.Drawing.Bitmap ---
-        using (var memoryStream = new MemoryStream(qrCodeBytes))
-        using (var bitmap = new Bitmap(memoryStream))
-        {
-            // Este reader vem do pacote ZXing.Net.Bindings.Windows.Compatibility
-            var reader = new BarcodeReader();
-            result = reader.Decode(bitmap);
-        }
-#endif
-
-        // A variável 'result' agora é acessível aqui, independentemente do caminho escolhido.
-        if (result != null && !string.IsNullOrEmpty(result.Text))
-        {
-            return result.Text;
-        }
-
-        throw new InvalidDataException("Não foi possível extrair conteúdo do QR Code a partir da imagem.");
+        string[] parts = inviteCode.Split('-');
+        // A biblioteca usa 5 palavras para ambos os modos.
+        return parts.Length == 5;
     }
 
-    // --- MÉTODOS PRIVADOS AUXILIARES ---
-
-    private static (IPAddress, ushort) BytesToIpPort(byte[] combinedBytes)
+    /// <summary>
+    /// Codifica um endereço IP e uma porta numa string de 5 palavras.
+    /// Utiliza o encoder "com porta" da biblioteca.
+    /// </summary>
+    /// <param name="ip">O endereço IP a codificar.</param>
+    /// <param name="port">A porta a codificar.</param>
+    /// <returns>A string codificada.</returns>
+    public string Encode(IPAddress ip, ushort port)
     {
-        if (combinedBytes.Length != 6) throw new ArgumentException("Input data must be 6 bytes long.");
-
-        var ipBytes = new byte[4];
-        var portBytes = new byte[2];
-        Buffer.BlockCopy(combinedBytes, 0, ipBytes, 0, 4);
-        Buffer.BlockCopy(combinedBytes, 4, portBytes, 0, 2);
-
-        if (BitConverter.IsLittleEndian) Array.Reverse(portBytes);
-
-        return (new IPAddress(ipBytes), BitConverter.ToUInt16(portBytes, 0));
+        // Chama diretamente o método Encode da instância do WordEncoder configurada com a estratégia de IP e Porta.
+        // Usa o listId = 0 por defeito, pois a interface não especifica qual usar.
+        return _encoderWithPort.Encode(ip, port, listId: 0);
     }
 
-    private async Task<IPAddress?> GetPublicIpAsync()
+    // NOTA: Poderia adicionar aqui um overload para o caso "sem porta" se a interface permitisse.
+    // public string Encode(IPAddress ip)
+    // {
+    //     return _encoderWithoutPort.Encode(ip, listId: 0);
+    // }
+
+    /// <summary>
+    /// Descodifica uma string de 5 palavras para um endereço IP e uma porta.
+    /// Utiliza o decoder "com porta" da biblioteca.
+    /// </summary>
+    /// <param name="inviteCode">A string de convite a descodificar.</param>
+    /// <returns>Um tuplo contendo o IP e a porta descodificados.</returns>
+    /// <exception cref="FormatException">Lançada se o código não estiver num formato válido ou não puder ser descodificado.</exception>
+    public (IPAddress ip, ushort port) Decode(string inviteCode)
+    {
+        if (!IsFormat(inviteCode))
+            throw new System.FormatException($"O código de convite '{inviteCode}' não está no formato de 5 palavras válido.");
+
+        try
+        {
+            // Chama diretamente o método Decode do WordEncoder.
+            var (decodedIp, decodedPort, _) = _encoderWithPort.Decode(inviteCode);
+
+            // A estratégia com porta deve sempre retornar uma porta. Se não o fizer, é um estado inesperado.
+            if (!decodedPort.HasValue)
+            {
+                throw new InvalidOperationException("A descodificação resultou num valor de porta nulo, o que é inesperado para este formato.");
+            }
+
+            return (decodedIp, decodedPort.Value);
+        }
+        // A biblioteca pode lançar KeyNotFoundException ou outras se as palavras não existirem.
+        // Capturamos e encapsulamos numa FormatException para o consumidor desta classe.
+        catch (Exception ex) when (ex is KeyNotFoundException || ex is ArgumentException)
+        {
+            throw new System.FormatException($"Falha ao descodificar o código de convite '{inviteCode}'. Detalhes: {ex.Message}", ex);
+        }
+    }
+}
+
+/// <summary>
+/// Gere e descodifica convites de conexão baseados no IP e porta,
+/// utilizando uma arquitetura modular de conversores.
+/// </summary>
+public class InviteGenerator
+{
+    private readonly IPAddress _ip;
+    private readonly ushort _port;
+    private readonly Dictionary<InviteFormat, IInviteConverter> _converters;
+    private static readonly List<IInviteConverter> AllConverters;
+
+    private const string StunServer = "stun.l.google.com:19302";
+    
+    // Inicializador estático para popular a lista de conversores para o método estático de decodificação.
+    static InviteGenerator()
+    {
+        AllConverters = new List<IInviteConverter>
+        {
+            new DefaultConverter(),
+            new WordsConverter(), // Prioridade alta por ser distintivo (contém '-')
+            new Base16Converter(),
+            new Base62Converter()
+            // Adicione novos conversores aqui. A ordem importa para a deteção.
+        };
+    }
+
+    private InviteGenerator(IPAddress ip, ushort port)
+    {
+        _ip = ip;
+        _port = port;
+        // Cria um dicionário para acesso rápido pelo enum
+        _converters = AllConverters.ToDictionary(c => c.Format, c => c);
+    }
+
+    /// <summary>
+    /// Cria uma instância do gerador, descobrindo o IP público via STUN.
+    /// </summary>
+    /// <param name="port">A porta a ser usada no convite.</param>
+    /// <returns>Uma instância de InviteGenerator.</returns>
+    /// <exception cref="InvalidOperationException">Se não for possível obter o IP público.</exception>
+    public static async Task<InviteGenerator> CreateAsync(ushort port)
+    {
+        IPAddress? publicIp = await GetPublicIpAsync();
+        if (publicIp == null)
+        {
+            throw new InvalidOperationException("Não foi possível obter o endereço IP público. Verifique a conexão com a internet ou as configurações de firewall.");
+        }
+        return new InviteGenerator(publicIp, port);
+    }
+
+    /// <summary>
+    /// Cria uma instância do gerador com um IP fixo, ideal para testes locais ou redes controladas.
+    /// </summary>
+    /// <param name="fixedIp">O endereço IP a ser usado.</param>
+    /// <param name="port">A porta a ser usada.</param>
+    /// <returns>Uma instância de InviteGenerator.</returns>
+    public static InviteGenerator CreateWithFixedIp(IPAddress fixedIp, ushort port)
+    {
+        return new InviteGenerator(fixedIp, port);
+    }
+
+    /// <summary>
+    /// Obtém o convite no formato especificado.
+    /// </summary>
+    /// <param name="format">O formato desejado para o convite.</param>
+    /// <returns>A string do convite no formato solicitado.</returns>
+    public string ObterConvite(InviteFormat format)
+    {
+        if (format == InviteFormat.QrCodeBase64)
+        {
+            // O QR Code sempre codifica o formato mais universal e legível (Default).
+            string contentToEncode = ObterConvite(InviteFormat.Default);
+            return GenerateQrCodeBase64(contentToEncode);
+        }
+
+        if (_converters.TryGetValue(format, out var converter))
+        {
+            return converter.Encode(_ip, _port);
+        }
+
+        throw new ArgumentOutOfRangeException(nameof(format), "Formato de convite não suportado.");
+    }
+
+    /// <summary>
+    /// Tenta decodificar uma string de convite, detetando automaticamente o seu formato.
+    /// </summary>
+    /// <param name="inviteCode">A string de convite a ser decodificada.</param>
+    /// <param name="decodedIpPort">O resultado da decodificação (IP e porta).</param>
+    /// <returns>O InviteFormat detetado, ou InviteFormat.Unknown se a decodificação falhar.</returns>
+    public static InviteFormat TryDecodeInvite(string inviteCode, out (IPAddress ip, ushort port) decodedIpPort)
+    {
+        inviteCode = inviteCode.Trim();
+        decodedIpPort = default;
+
+        // 1. Caso especial: QR Code (Base64)
+        if (InviteHelpers.IsBase64String(inviteCode))
+        {
+            try
+            {
+                var qrContent = DecodeQrCodeFromBase64(inviteCode);
+                // Chama-se recursivamente para decodificar o conteúdo do QR Code.
+                // O formato retornado será o do conteúdo, não QrCodeBase64.
+                return TryDecodeInvite(qrContent, out decodedIpPort);
+            }
+            catch { /* Ignora falha e tenta outros formatos */ }
+        }
+
+        // 2. Itera sobre os conversores registados
+        // A ordem na lista 'AllConverters' é importante para evitar falsos positivos (ex: Base62 vs Base16)
+        foreach (var converter in AllConverters)
+        {
+            if (converter.IsFormat(inviteCode))
+            {
+                try
+                {
+                    decodedIpPort = converter.Decode(inviteCode);
+                    return converter.Format; // Sucesso!
+                }
+                catch
+                {
+                    // A deteção foi positiva, mas a decodificação falhou (código inválido).
+                    // Continua para o próximo conversor, pode ser um caso de sobreposição de regras.
+                }
+            }
+        }
+        
+        return InviteFormat.Unknown;
+    }
+
+    // --- MÉTODOS PRIVADOS E AUXILIARES ---
+
+    private static async Task<IPAddress?> GetPublicIpAsync()
     {
         var pc = new RTCPeerConnection(new RTCConfiguration { iceServers = new List<RTCIceServer> { new RTCIceServer { urls = StunServer } } });
         var tcs = new TaskCompletionSource<IPAddress?>();
@@ -327,73 +453,6 @@ public class InviteGenerator
         return completedTask == tcs.Task ? await tcs.Task : null;
     }
 
-    private static string ToBase62(byte[] data)
-    {
-        var number = new BigInteger(data, isUnsigned: true, isBigEndian: true);
-        if (number == 0) return Base62Charset[0].ToString();
-        var sb = new StringBuilder();
-        while (number > 0)
-        {
-            number = BigInteger.DivRem(number, Base62Charset.Length, out var remainder);
-            sb.Insert(0, Base62Charset[(int)remainder]);
-        }
-        return sb.ToString();
-    }
-
-    private static string ToDiceware(string hexString)
-    {
-        var words = new string[3];
-        for (int i = 0; i < 3; i++)
-        {
-            string hexPart = hexString.Substring(i * 4, 4);
-            int value = int.Parse(hexPart, NumberStyles.HexNumber);
-            //words[i] = DicewareWords[value % DicewareWords.Length];
-        }
-        return string.Join("-", words);
-    }
-
-    /// <summary>
-    /// Codifica uma string hexadecimal de 12 caracteres para um formato de 6 palavras reversível.
-    /// </summary>
-    public static string ToReversibleDiceware6(string hexString)
-    {
-        if (hexString.Length != 12) throw new ArgumentException("Hex string must be 12 characters long.");
-
-        var words = new string[6];
-        for (int i = 0; i < 6; i++)
-        {
-            // Pega um bloco de 2 caracteres hex (um byte).
-            string hexPart = hexString.Substring(i * 2, 2);
-            // Converte o hex para um byte (0-255).
-            byte index = byte.Parse(hexPart, NumberStyles.HexNumber);
-            // Usa o byte como índice direto na lista de 256 palavras.
-            //words[i] = ReversibleWordList256[index];
-        }
-        return string.Join("-", words);
-    }
-
-    /// <summary>
-    /// Descodifica um convite de 6 palavras reversível de volta para a sua string hexadecimal.
-    /// </summary>
-    public static string DecodeReversibleDiceware6(string dicewareCode)
-    {
-        var parts = dicewareCode.Split('-');
-        if (parts.Length != 6) throw new ArgumentException("Invalid 6-word reversible Diceware format.");
-
-        var hexBuilder = new StringBuilder(12);
-        for (int i = 0; i < 6; i++)
-        {
-            // Encontra o índice da palavra na lista.
-            // int index = Array.IndexOf(ReversibleWordList256, parts[i]);
-            // if (index == -1) throw new KeyNotFoundException($"A palavra '{parts[i]}' não foi encontrada na lista de palavras.");
-
-            // Converte o índice (0-255) de volta para um hexadecimal de 2 caracteres (ex: 42 -> "2A").
-            // hexBuilder.Append(index.ToString("X2"));
-        }
-        return hexBuilder.ToString();
-    }
-
-
     private string GenerateQrCodeBase64(string content)
     {
         var qrGenerator = new QRCodeGenerator();
@@ -403,10 +462,77 @@ public class InviteGenerator
         return Convert.ToBase64String(qrCodeImageBytes);
     }
 
-    private static bool IsBase64String(string s)
+    /// <summary>
+    /// Descodifica uma string Base64 de um QR Code e retorna o seu conteúdo textual.
+    /// Usa diretivas de compilação para ser multiplataforma.
+    /// </summary>
+    public static string DecodeQrCodeFromBase64(string base64QrCode)
+    {
+        byte[] qrCodeBytes = Convert.FromBase64String(base64QrCode);
+        Result? result;
+
+#if ANDROID
+        // --- Caminho para Android (e outras plataformas não-Windows) usando ImageSharp ---
+        using var memoryStream = new MemoryStream(qrCodeBytes);
+        using var image = Image.Load<L8>(memoryStream);
+        var reader = new BarcodeReader<L8>();
+        result = reader.Decode(image);
+#else
+        // --- Caminho para Windows usando System.Drawing.Bitmap ---
+        using var memoryStream = new MemoryStream(qrCodeBytes);
+        using var bitmap = new Bitmap(memoryStream);
+        var reader = new BarcodeReader(); // ZXing.Net.Bindings.Windows.Compatibility
+        result = reader.Decode(bitmap);
+#endif
+
+        if (result != null && !string.IsNullOrEmpty(result.Text))
+        {
+            return result.Text;
+        }
+
+        throw new InvalidDataException("Não foi possível extrair conteúdo do QR Code a partir da imagem.");
+    }
+}
+
+/// <summary>
+/// Classe auxiliar com métodos estáticos partilhados pelos conversores.
+/// </summary>
+internal static class InviteHelpers
+{
+    /// <summary>
+    /// Converte um IP e porta para um array de 6 bytes.
+    /// </summary>
+    public static byte[] IpPortToBytes(IPAddress ip, ushort port)
+    {
+        byte[] ipBytes = ip.GetAddressBytes();
+        byte[] portBytes = BitConverter.GetBytes(port);
+        if (BitConverter.IsLittleEndian) Array.Reverse(portBytes);
+        return ipBytes.Concat(portBytes).ToArray();
+    }
+
+    /// <summary>
+    /// Converte um array de 6 bytes para um IP e porta.
+    /// </summary>
+    public static (IPAddress, ushort) BytesToIpPort(byte[] combinedBytes)
+    {
+        if (combinedBytes.Length != 6) throw new ArgumentException("Os dados de entrada devem ter 6 bytes.", nameof(combinedBytes));
+
+        var ipBytes = new byte[4];
+        var portBytes = new byte[2];
+        Buffer.BlockCopy(combinedBytes, 0, ipBytes, 0, 4);
+        Buffer.BlockCopy(combinedBytes, 4, portBytes, 0, 2);
+
+        if (BitConverter.IsLittleEndian) Array.Reverse(portBytes);
+
+        return (new IPAddress(ipBytes), BitConverter.ToUInt16(portBytes, 0));
+    }
+    
+    /// <summary>
+    /// Verifica se uma string parece ser uma string Base64 válida.
+    /// </summary>
+    public static bool IsBase64String(string s)
     {
         s = s.Trim();
         return (s.Length % 4 == 0) && Regex.IsMatch(s, @"^[a-zA-Z0-9\+/]*={0,3}$", RegexOptions.None);
     }
 }
-

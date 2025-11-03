@@ -5,55 +5,208 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using Ip_Word_Encoder_V3;
-using Invite_Generator;
+
+// IMPORTANTE: Certifique-se que está a usar a nova biblioteca refatorada!
+using Invite_Generator.Refactored;
 
 /// <summary>
-/// Programa principal para hospedar uma sessão ou conectar-se a uma, usando o InviteGenerator.
+/// Programa principal com um menu para usar as funcionalidades do InviteGenerator.
 /// </summary>
 public class Program
 {
+    // Ponto de entrada da aplicação
     public static async Task Main()
     {
-        Program_V3.Main();
-        Console.WriteLine("Pressione Enter para iniciar o utilitário de conexão P2P...");
-        Console.ReadLine();
-        Console.WriteLine("--- Utilitário de Conexão P2P ---");
-        Console.WriteLine("Escolha o modo de operação:");
-        Console.WriteLine("  [1] Hospedar uma sessão (Gerar convites)");
-        Console.WriteLine("  [2] Conectar a uma sessão (Usar um código de convite)");
-        Console.WriteLine("  [3] Hospedar uma sessão de teste local (IP Fixo: 127.0.0.1)");
-        Console.Write("Opção: ");
+        await ShowMainMenuAsync();
+    }
 
-        string? choice = Console.ReadLine();
-
-        switch (choice)
+    /// <summary>
+    /// Exibe o menu principal e direciona o fluxo do programa.
+    /// </summary>
+    private static async Task ShowMainMenuAsync()
+    {
+        while (true)
         {
-            case "1":
-                await RunHostMode(useFixedIp: false);
-                break;
-            case "2":
-                await RunClientMode();
-                break;
-            case "3":
-                await RunHostMode(useFixedIp: true);
-                break;
-            default:
-                Console.WriteLine("Opção inválida.");
-                break;
+            Console.Clear();
+            Console.WriteLine("--- Utilitário de Convites P2P ---");
+            Console.WriteLine("Escolha uma opção:");
+            Console.WriteLine("  [1] Criar convites a partir de um IP");
+            Console.WriteLine("  [2] Obter IP a partir de um convite");
+            Console.WriteLine("  [3] Modo Host/Cliente (Teste de Conexão)");
+            Console.WriteLine("  [0] Sair");
+            Console.Write("\nOpção: ");
+
+            string? choice = Console.ReadLine();
+
+            switch (choice)
+            {
+                case "1":
+                    await HandleGenerateInvitesAsync();
+                    break;
+                case "2":
+                    HandleDecodeInvite();
+                    break;
+                case "3":
+                    await ShowHostClientMenuAsync();
+                    break;
+                case "0":
+                    return; // Sai do loop e encerra o programa
+                default:
+                    Console.WriteLine("Opção inválida. Pressione Enter para tentar novamente.");
+                    Console.ReadLine();
+                    break;
+            }
         }
     }
+
+    /// <summary>
+    /// Opção 1: Gera e exibe convites.
+    /// </summary>
+    private static async Task HandleGenerateInvitesAsync()
+    {
+        Console.Clear();
+        Console.WriteLine("--- Gerar Convites ---");
+
+        Console.Write("Insira a porta (padrão: 60000): ");
+        ushort port = ushort.TryParse(Console.ReadLine(), out var p) ? p : (ushort)60000;
+
+        Console.Write("Usar IP público via STUN? (S/N, padrão: S): ");
+        bool usePublicIp = !Console.ReadLine()?.Trim().Equals("N", StringComparison.OrdinalIgnoreCase) ?? true;
+
+        try
+        {
+            Console.WriteLine("\nA gerar convites...");
+            InviteGenerator generator;
+            if (usePublicIp)
+            {
+                generator = await InviteGenerator.CreateAsync(port);
+                Console.WriteLine("IP Público obtido com sucesso!");
+            }
+            else
+            {
+                generator = InviteGenerator.CreateWithFixedIp(IPAddress.Loopback, port);
+                Console.WriteLine("Usando IP de teste local (127.0.0.1).");
+            }
+
+            Console.WriteLine("\nConvites gerados:");
+            Console.WriteLine($"  - Default:      {generator.ObterConvite(InviteFormat.Default)}");
+            Console.WriteLine($"  - Base16 (Hex): {generator.ObterConvite(InviteFormat.Base16)}");
+            Console.WriteLine($"  - Base62:       {generator.ObterConvite(InviteFormat.Base62)}");
+
+            try
+            {
+                Console.WriteLine($"  - Humano:       {generator.ObterConvite(InviteFormat.Human)}");
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"  - Humano:       ERRO - {ex.Message}");
+                Console.ResetColor();
+            }
+
+            await OpenQrCodeFile(generator.ObterConvite(InviteFormat.QrCodeBase64));
+        }
+        catch (Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine($"\nOcorreu um erro: {ex.Message}");
+            Console.ResetColor();
+        }
+
+        Console.WriteLine("\nPressione Enter para voltar ao menu principal.");
+        Console.ReadLine();
+    }
+
+    /// <summary>
+    /// Opção 2: Decodifica um convite inserido pelo utilizador.
+    /// </summary>
+    private static void HandleDecodeInvite()
+    {
+        Console.Clear();
+        Console.WriteLine("--- Obter IP a partir de um Convite ---");
+        Console.Write("Cole o código de convite (ou o conteúdo Base64 do QR Code) e pressione Enter: ");
+        string? inviteCode = Console.ReadLine();
+
+        if (string.IsNullOrWhiteSpace(inviteCode))
+        {
+            Console.WriteLine("Código inválido.");
+        }
+        else
+        {
+            var format = InviteGenerator.TryDecodeInvite(inviteCode, out var decodedIpPort);
+
+            if (format == InviteFormat.Unknown)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Não foi possível decodificar o convite. Formato desconhecido ou inválido.");
+                Console.ResetColor();
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine("\nConvite decodificado com sucesso!");
+                Console.ResetColor();
+                Console.WriteLine($"  - Formato detetado: {format}");
+                Console.WriteLine($"  - Endereço IP:      {decodedIpPort.ip}");
+                Console.WriteLine($"  - Porta:            {decodedIpPort.port}");
+            }
+        }
+
+        Console.WriteLine("\nPressione Enter para voltar ao menu principal.");
+        Console.ReadLine();
+    }
+
+    /// <summary>
+    /// Opção 3: Exibe o submenu para teste de conexão Host/Cliente.
+    /// </summary>
+    private static async Task ShowHostClientMenuAsync()
+    {
+        while (true)
+        {
+            Console.Clear();
+            Console.WriteLine("--- Modo Host/Cliente (Teste de Conexão) ---");
+            Console.WriteLine("Escolha o modo de operação:");
+            Console.WriteLine("  [1] Hospedar uma sessão (IP Público)");
+            Console.WriteLine("  [2] Conectar a uma sessão");
+            Console.WriteLine("  [3] Hospedar uma sessão de teste (IP Fixo: 127.0.0.1)");
+            Console.WriteLine("  [0] Voltar ao menu principal");
+            Console.Write("\nOpção: ");
+
+            string? choice = Console.ReadLine();
+
+            switch (choice)
+            {
+                case "1":
+                    await RunHostMode(useFixedIp: false);
+                    break;
+                case "2":
+                    await RunClientMode();
+                    break;
+                case "3":
+                    await RunHostMode(useFixedIp: true);
+                    break;
+                case "0":
+                    return; // Volta ao menu principal
+                default:
+                    Console.WriteLine("Opção inválida.");
+                    break;
+            }
+            Console.WriteLine("\nPressione Enter para continuar...");
+            Console.ReadLine();
+        }
+    }
+
+    #region Lógica Host/Cliente (Reutilizada do código original)
 
     /// <summary>
     /// Executa a aplicação no modo Host, gerando convites e aguardando conexões.
     /// </summary>
     private static async Task RunHostMode(bool useFixedIp)
     {
-        const ushort port = 6000;
+        const ushort port = 60000;
 
         try
         {
-            // --- Fase 1: Inicializar o generator ---
             Console.WriteLine("\n[Fase 1/3] A gerar convites...");
             InviteGenerator generator;
             if (useFixedIp)
@@ -66,15 +219,11 @@ public class Program
                 generator = await InviteGenerator.CreateAsync(port);
             }
 
-            // --- Fase 2: Listar os resultados ---
             Console.WriteLine("\n[Fase 2/3] Convites gerados. Partilhe um destes códigos com o outro utilizador:");
-            Console.WriteLine($"  - Default:      {generator.ObterIp(InviteFormat.Default)}");
-            Console.WriteLine($"  - Base16 (Hex): {generator.ObterIp(InviteFormat.Base16)}");
-            Console.WriteLine($"  - Base62:       {generator.ObterIp(InviteFormat.Base62)}");
-            Console.WriteLine($"  - Humano:       {generator.ObterIp(InviteFormat.Human)}");
-            await OpenQrCodeFile(generator.ObterIp(InviteFormat.QrCodeBase64));
+            Console.WriteLine($"  - Default: {generator.ObterConvite(InviteFormat.Default)}");
+            Console.WriteLine($"  - Humano:  {generator.ObterConvite(InviteFormat.Human)}");
+            await OpenQrCodeFile(generator.ObterConvite(InviteFormat.QrCodeBase64));
 
-            // --- Fase 3: Iniciar o servidor e aguardar conexões ---
             Console.WriteLine($"\n[Fase 3/3] Servidor de escuta ativo em '0.0.0.0:{port}'.");
             Console.WriteLine("A aguardar conexões... Pressione CTRL + C para encerrar.");
 
@@ -101,7 +250,7 @@ public class Program
     private static async Task RunClientMode()
     {
         Console.WriteLine("\n--- Modo Cliente ---");
-        Console.Write("Cole o código de convite (ou o conteúdo Base64 do QR Code) e pressione Enter: ");
+        Console.Write("Cole o código de convite e pressione Enter: ");
         string? inviteCode = Console.ReadLine();
 
         if (string.IsNullOrWhiteSpace(inviteCode))
@@ -110,23 +259,21 @@ public class Program
             return;
         }
 
-        // Tenta descodificar o código inserido
         var format = InviteGenerator.TryDecodeInvite(inviteCode, out var decodedIpPort);
 
         if (format == InviteFormat.Unknown)
         {
             Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Não foi possível descodificar o código de convite. Formato desconhecido ou inválido.");
+            Console.WriteLine("Não foi possível decodificar o código. Formato desconhecido ou inválido.");
             Console.ResetColor();
             return;
         }
 
-        Console.WriteLine($"Código descodificado como formato '{format}'. A tentar conectar a {decodedIpPort.ip}:{decodedIpPort.port}...");
+        Console.WriteLine($"Código decodificado como formato '{format}'. A tentar conectar a {decodedIpPort.ip}:{decodedIpPort.port}...");
 
         try
         {
             using var client = new TcpClient();
-            // Adiciona um timeout para a conexão
             var connectTask = client.ConnectAsync(decodedIpPort.ip, decodedIpPort.port);
             if (await Task.WhenAny(connectTask, Task.Delay(5000)) != connectTask)
             {
@@ -175,7 +322,7 @@ public class Program
                 }
             }
         }
-        catch (OperationCanceledException) { /* Terminação limpa e esperada */ }
+        catch (OperationCanceledException) { /* Ignora, é o encerramento normal */ }
         catch (Exception ex) { Console.WriteLine($"Erro no listener: {ex.Message}"); }
         finally { listener.Stop(); }
     }
@@ -200,4 +347,6 @@ public class Program
             Console.ResetColor();
         }
     }
+
+    #endregion
 }

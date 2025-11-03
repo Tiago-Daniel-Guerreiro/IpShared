@@ -1,4 +1,4 @@
-﻿namespace Ip_Word_Encoder_V4; // Por fazer
+﻿namespace Ip_Word_Encoder_V3;
 
 using System;
 using System.Collections;
@@ -61,7 +61,7 @@ public static class Program_V3
     private static WordEncoder? _defaultEncoder;
     private static readonly Random _randomGenerator = new();
 
-    public static void Main()
+    public static void Main_V3()
     {
         var defaultConfig = new WordEncoderConfig();
 
@@ -459,7 +459,7 @@ public static class BitArrayUtils
     public static BitArray Reverse(BitArray source)
     {
         int length = source.Length;
-        BitArray reversed = new BitArray(length);
+        BitArray reversed = new(length);
 
         for (int i = 0; i < length; i++)
             reversed[i] = source[length - 1 - i];
