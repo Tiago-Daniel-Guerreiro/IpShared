@@ -13,13 +13,25 @@
     <Grid RowDefinitions="Auto,*,Auto" Margin="15">
         <!-- Secção de Controlo -->
         <StackPanel Grid.Row="0" Spacing="10">
-            <TextBlock Text="Gerar Convites a partir de um IP" FontSize="18" FontWeight="Bold"/>
+            <TextBlock Text="Gerar Convites a partir de um IP" FontSize="16" FontWeight="Bold"/>
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                 <TextBlock Text="Porta:" VerticalAlignment="Center"/>
-                <TextBox Text="{Binding Port}" Width="80"/>
+                <TextBox Text="{Binding Port}" Width="80" Watermark="0-65535"/>
                 <CheckBox Content="Usar IP Público (STUN)" IsChecked="{Binding UsePublicIp}"/>
-                <Button Content="Gerar Convites" Command="{Binding GenerateInvitesAsync}" Classes="accent"/>
             </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center" IsVisible="{Binding !UsePublicIp}">
+                <CheckBox Content="Usar IP Local (Rede)" IsChecked="{Binding UseLocalIp}"/>
+                <TextBlock Text="IP Fixo:" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding FixedIp}" Width="150" Watermark="0.0.0.0 - 255.255.255.255"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock Text="ID Dicionário (Humano):" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding DictionaryIdText}" 
+                         Width="50" 
+                         Watermark="0-15"
+                         MaxLength="2"/>
+            </StackPanel>
+            <Button Content="Gerar Convites" Command="{Binding GenerateInvitesAsync}" Classes="accent"/>
         </StackPanel>
 
         <!-- Secção de Resultados -->
@@ -42,6 +54,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding QrCodeImage, Converter={x:Static ObjectConverters.IsNotNull}}">
                      <TextBlock Text="QR Code:" FontWeight="Bold" VerticalAlignment="Center"/>
                      <Image Source="{Binding QrCodeImage}" Width="150" Height="150" Margin="10"/>
+                     <Button Content="Copiar Base64" Command="{Binding CopyQrCodeBase64}" VerticalAlignment="Center"/>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

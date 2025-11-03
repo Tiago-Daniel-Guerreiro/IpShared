@@ -35,12 +35,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Resources\Words_17.txt">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="Resources\Words_16.txt">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
     <Content Include="Resources\Words_15.txt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>

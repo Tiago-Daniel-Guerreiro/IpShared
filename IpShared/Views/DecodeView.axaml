@@ -9,7 +9,7 @@
     <Grid RowDefinitions="Auto,*,Auto" Margin="15">
         <!-- Controlo -->
         <StackPanel Grid.Row="0" Spacing="10">
-            <TextBlock Text="Obter IP a partir de um Convite" FontSize="18" FontWeight="Bold"/>
+            <TextBlock Text="Obter IP a partir de um Convite" FontSize="16" FontWeight="Bold"/>
             <TextBlock Text="Cole o código de convite (ou o conteúdo Base64 do QR Code):"/>
             <TextBox Text="{Binding InviteCode}" Watermark="Insira o código aqui..."/>
             <Button Content="Descodificar" Command="{Binding DecodeInvite}" Classes="accent"/>

@@ -7,7 +7,8 @@
         mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="600"
         x:Class="IpShared.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
-        Title="Utilitário de Convites P2P"
+        Title="IpShared - Ferramenta para partilha de IPs"
+        Icon="/Assets/IpShared.png"
         Width="800" Height="600">
 
     <Design.DataContext>
@@ -25,5 +26,4 @@
             <views:HostClientView DataContext="{Binding HostClientVM}"/>
         </TabItem>
     </TabControl>
-
 </Window>

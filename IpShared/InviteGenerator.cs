@@ -6,6 +6,7 @@ using SIPSorcery.Net;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -15,18 +16,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ZXing;
-
-// ALTERAÇÃO: Diretivas de compilação ajustadas para serem mais genéricas.
-#if WINDOWS
-    // Usings específicos para Windows
-    using System.Drawing;
-    using ZXing.Windows.Compatibility;
-#else
-    // Usings multiplataforma (Linux, macOS, Android, etc.)
-    using SixLabors.ImageSharp;
-    using SixLabors.ImageSharp.PixelFormats;
-    using ZXing.ImageSharp;
-#endif
+using ZXing.Windows.Compatibility;
 
 /// <summary>
 /// Enumeração para especificar o formato de convite desejado.
@@ -75,8 +65,6 @@ public interface IInviteConverter
     /// <returns>Uma tupla contendo o IPAddress e a porta.</returns>
     (IPAddress ip, ushort port) Decode(string inviteCode);
 }
-
-
 
 /// <summary>
 /// Conversor para o formato padrão "IP:Porta".
@@ -253,9 +241,20 @@ public class WordsConverter : IInviteConverter
     /// <returns>A string codificada.</returns>
     public string Encode(IPAddress ip, ushort port)
     {
+        return Encode(ip, port, 0);
+    }
+
+    /// <summary>
+    /// Codifica um endereço IP e uma porta numa string de 5 palavras com ID de dicionário específico.
+    /// </summary>
+    /// <param name="ip">O endereço IP a codificar.</param>
+    /// <param name="port">A porta a codificar.</param>
+    /// <param name="listId">O ID do dicionário (0-17).</param>
+    /// <returns>A string codificada.</returns>
+    public string Encode(IPAddress ip, ushort port, int listId)
+    {
         // Chama diretamente o método Encode da instância do WordEncoder configurada com a estratégia de IP e Porta.
-        // Usa o listId = 0 por defeito, pois a interface não especifica qual usar.
-        return _encoderWithPort.Encode(ip, port, listId: 0);
+        return _encoderWithPort.Encode(ip, port, listId: listId);
     }
 
     // NOTA: Poderia adicionar aqui um overload para o caso "sem porta" se a interface permitisse.
@@ -299,6 +298,190 @@ public class WordsConverter : IInviteConverter
 }
 
 /// <summary>
+/// Conversor para o formato QR Code (imagem PNG em Base64).
+/// Este conversor atua como um "contêiner", codificando e decodificando
+/// um convite no formato padrão (IP:Porta) dentro de um QR Code.
+/// </summary>
+public class QrConverter : IInviteConverter
+{
+    public InviteFormat Format => InviteFormat.QrCodeBase64;
+
+    public bool IsFormat(string inviteCode)
+    {
+        if (!InviteHelpers.IsBase64String(inviteCode) || inviteCode.Length < 100)
+        {
+            return false;
+        }
+
+        try
+        {
+            byte[] data = Convert.FromBase64String(inviteCode);
+            // Assinatura PNG: 89 50 4E 47
+            return data.Length > 8 &&
+                    data[0] == 0x89 && data[1] == 0x50 &&
+                    data[2] == 0x4E && data[3] == 0x47;
+        }
+        catch (System.FormatException)
+        {
+            return false;
+        }
+    }
+
+    public string Encode(IPAddress ip, ushort port)
+    {
+        var contentConverter = new DefaultConverter();
+        string content = contentConverter.Encode(ip, port);
+
+        var qrGenerator = new QRCodeGenerator();
+        QRCodeData qrCodeData = qrGenerator.CreateQrCode(content, QRCodeGenerator.ECCLevel.Q);
+        var qrCode = new PngByteQRCode(qrCodeData);
+        byte[] qrCodeImageBytes = qrCode.GetGraphic(5);
+
+        return Convert.ToBase64String(qrCodeImageBytes);
+    }
+
+    public (IPAddress ip, ushort port) Decode(string inviteCode)
+    {
+        string content = DecodeContentFromBase64(inviteCode);
+        var contentConverter = new DefaultConverter();
+
+        if (contentConverter.IsFormat(content))
+        {
+            return contentConverter.Decode(content);
+        }
+
+        throw new System.FormatException($"O conteúdo do QR Code ('{content}') não está no formato esperado 'IP:Porta'.");
+    }
+
+    /// <summary>
+    /// MÉTODO DE DEPURAÇÃO: Tenta decodificar o QR Code e mostra cada passo numa MessageBox.
+    /// </summary>
+    public void DebugDecode(string inviteCode)
+    {
+#if !WINDOWS
+        // MessageBox não está disponível em plataformas não-Windows por padrão.
+        // Poderíamos usar um evento ou outra forma de log aqui.
+        Console.WriteLine("O método de depuração com MessageBox só está implementado para Windows.");
+        try
+        {
+            var (ip, port) = Decode(inviteCode);
+            Console.WriteLine($"Sucesso: {ip}:{port}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Falha: {ex.Message}");
+        }
+        return;
+#else
+        var log = new StringBuilder();
+        log.AppendLine("--- Início da Depuração do QrConverter ---");
+
+        try
+        {
+            // Passo 1: Verificar se é um formato válido
+            log.AppendLine("Passo 1: Verificando formato com IsFormat()...");
+            if (!IsFormat(inviteCode))
+            {
+                log.AppendLine("Resultado: FALHA. 'IsFormat' retornou false.");
+                MessageBox.Show(log.ToString(), "Depuração QrConverter", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            log.AppendLine("Resultado: SUCESSO. 'IsFormat' retornou true.");
+            log.AppendLine();
+
+            // Passo 2: Decodificar a string Base64 para bytes
+            log.AppendLine("Passo 2: Decodificando a string Base64 para um array de bytes...");
+            byte[] qrCodeBytes = Convert.FromBase64String(inviteCode);
+            log.AppendLine($"Resultado: SUCESSO. Obtidos {qrCodeBytes.Length} bytes.");
+            log.AppendLine();
+
+            // Passo 3: Ler a imagem e extrair o conteúdo do QR Code
+            log.AppendLine("Passo 3: Lendo a imagem com ZXing para extrair o texto...");
+            string? qrContent = null;
+            Result? zxingResult = null;
+
+            // A abordagem com MemoryStream às vezes pode ser problemática.
+            // Vamos tentar salvar em um arquivo temporário como alternativa de depuração se falhar.
+            try
+            {
+                using var memoryStream = new MemoryStream(qrCodeBytes);
+                // IMPORTANTE: Resetar a posição do stream para o início antes de ler.
+                memoryStream.Position = 0;
+                using var bitmap = new Bitmap(memoryStream);
+                var reader = new ZXing.Windows.Compatibility.BarcodeReader();
+                zxingResult = reader.Decode(bitmap);
+
+                if (zxingResult != null)
+                {
+                    qrContent = zxingResult.Text;
+                    log.AppendLine($"Resultado: SUCESSO. Texto extraído: '{qrContent}'");
+                }
+                else
+                {
+                    log.AppendLine("Resultado: FALHA. 'reader.Decode(bitmap)' retornou null. A biblioteca não encontrou um QR Code na imagem.");
+                }
+            }
+            catch (Exception ex)
+            {
+                log.AppendLine($"Resultado: FALHA CRÍTICA durante a leitura da imagem: {ex.GetType().Name} - {ex.Message}");
+                MessageBox.Show(log.ToString(), "Depuração QrConverter", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            log.AppendLine();
+
+            // Passo 4: Se o conteúdo foi extraído, tentar parsear como IP:Porta
+            if (!string.IsNullOrEmpty(qrContent))
+            {
+                log.AppendLine("Passo 4: Analisando o texto extraído como 'IP:Porta'...");
+                var defaultConverter = new DefaultConverter();
+                if (defaultConverter.IsFormat(qrContent))
+                {
+                    var (ip, port) = defaultConverter.Decode(qrContent);
+                    log.AppendLine($"Resultado: SUCESSO FINAL!");
+                    log.AppendLine($"IP: {ip}");
+                    log.AppendLine($"Porta: {port}");
+                }
+                else
+                {
+                    log.AppendLine($"Resultado: FALHA. O texto '{qrContent}' não corresponde ao formato 'IP:Porta'.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            log.AppendLine($"--- ERRO INESPERADO DURANTE O PROCESSO ---");
+            log.AppendLine($"{ex.GetType().Name}: {ex.Message}");
+            log.AppendLine(ex.StackTrace);
+        }
+        finally
+        {
+            MessageBox.Show(log.ToString(), "Relatório de Depuração QrConverter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+#endif
+    }
+
+    private string DecodeContentFromBase64(string base64QrCode)
+    {
+        byte[] qrCodeBytes = Convert.FromBase64String(base64QrCode);
+        Result? result;
+
+        // Sempre usa a implementação Windows para evitar problemas com ImageSharp
+        using var memoryStream = new MemoryStream(qrCodeBytes);
+        using var bitmap = new Bitmap(memoryStream);
+        var reader = new ZXing.Windows.Compatibility.BarcodeReader();
+        result = reader.Decode(bitmap);
+
+        if (result != null && !string.IsNullOrEmpty(result.Text))
+        {
+            return result.Text;
+        }
+
+        throw new InvalidDataException("Não foi possível extrair conteúdo do QR Code a partir da imagem fornecida (ZXing retornou null).");
+    }
+}
+
+
+/// <summary>
 /// Gere e descodifica convites de conexão baseados no IP e porta,
 /// utilizando uma arquitetura modular de conversores.
 /// </summary>
@@ -316,6 +499,7 @@ public class InviteGenerator
     {
         AllConverters = new List<IInviteConverter>
         {
+            new QrConverter(),
             new DefaultConverter(),
             new WordsConverter(), // Prioridade alta por ser distintivo (contém '-')
             new Base16Converter(),
@@ -366,15 +550,24 @@ public class InviteGenerator
     /// <returns>A string do convite no formato solicitado.</returns>
     public string ObterConvite(InviteFormat format)
     {
-        if (format == InviteFormat.QrCodeBase64)
-        {
-            // O QR Code sempre codifica o formato mais universal e legível (Default).
-            string contentToEncode = ObterConvite(InviteFormat.Default);
-            return GenerateQrCodeBase64(contentToEncode);
-        }
+        return ObterConvite(format, 0);
+    }
 
+    /// <summary>
+    /// Obtém o convite no formato especificado com ID de dicionário.
+    /// </summary>
+    /// <param name="format">O formato desejado para o convite.</param>
+    /// <param name="listId">O ID do dicionário (0-17) para formato Human.</param>
+    /// <returns>A string do convite no formato solicitado.</returns>
+    public string ObterConvite(InviteFormat format, int listId)
+    {
         if (_converters.TryGetValue(format, out var converter))
         {
+            // Para WordsConverter, usa o listId
+            if (converter is WordsConverter wordsConverter)
+            {
+                return wordsConverter.Encode(_ip, _port, listId);
+            }
             return converter.Encode(_ip, _port);
         }
 
@@ -393,16 +586,31 @@ public class InviteGenerator
         decodedIpPort = default;
 
         // 1. Caso especial: QR Code (Base64)
-        if (InviteHelpers.IsBase64String(inviteCode))
+        // Verifica se é Base64 E se parece ser uma imagem (tamanho razoável para QR Code)
+        if (InviteHelpers.IsBase64String(inviteCode) && inviteCode.Length > 100)
         {
             try
             {
-                var qrContent = DecodeQrCodeFromBase64(inviteCode);
-                // Chama-se recursivamente para decodificar o conteúdo do QR Code.
-                // O formato retornado será o do conteúdo, não QrCodeBase64.
-                return TryDecodeInvite(qrContent, out decodedIpPort);
+                // Primeiro tenta decodificar o Base64 para bytes
+                byte[] imageBytes = Convert.FromBase64String(inviteCode);
+                
+                // Verifica se começa com a assinatura PNG (89 50 4E 47)
+                if (imageBytes.Length > 8 && 
+                    imageBytes[0] == 0x89 && 
+                    imageBytes[1] == 0x50 && 
+                    imageBytes[2] == 0x4E && 
+                    imageBytes[3] == 0x47)
+                {
+                    var qrConverter = new QrConverter();
+                    decodedIpPort = qrConverter.Decode(inviteCode);
+                    return InviteFormat.QrCodeBase64;
+                }
             }
-            catch { /* Ignora falha e tenta outros formatos */ }
+            catch (Exception ex)
+            {
+                // Re-lança a exceção para que a UI possa mostrá-la
+                throw new System.FormatException($"Erro ao decodificar QR Code Base64: {ex.Message}", ex);
+            }
         }
 
         // 2. Itera sobre os conversores registados
@@ -416,10 +624,10 @@ public class InviteGenerator
                     decodedIpPort = converter.Decode(inviteCode);
                     return converter.Format; // Sucesso!
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // A deteção foi positiva, mas a decodificação falhou (código inválido).
-                    // Continua para o próximo conversor, pode ser um caso de sobreposição de regras.
+                    // Re-lança exceção com mais contexto
+                    throw new System.FormatException($"Erro ao decodificar formato {converter.Format}: {ex.Message}", ex);
                 }
             }
         }
@@ -457,52 +665,6 @@ public class InviteGenerator
         if (pc.connectionState != RTCPeerConnectionState.closed) pc.close();
 
         return completedTask == tcs.Task ? await tcs.Task : null;
-    }
-
-    private string GenerateQrCodeBase64(string content)
-    {
-        var qrGenerator = new QRCodeGenerator();
-        QRCodeData qrCodeData = qrGenerator.CreateQrCode(content, QRCodeGenerator.ECCLevel.Q);
-        var qrCode = new PngByteQRCode(qrCodeData);
-        byte[] qrCodeImageBytes = qrCode.GetGraphic(5);
-        return Convert.ToBase64String(qrCodeImageBytes);
-    }
-
-    /// <summary>
-    /// Descodifica uma string Base64 de um QR Code e retorna o seu conteúdo textual.
-    /// Usa diretivas de compilação para ser multiplataforma.
-    /// </summary>
-    public static string DecodeQrCodeFromBase64(string base64QrCode)
-    {
-        byte[] qrCodeBytes = Convert.FromBase64String(base64QrCode);
-        Result? result;
-
-    #if WINDOWS
-        // --- Caminho para Windows usando System.Drawing.Bitmap ---
-        using var memoryStream = new MemoryStream(qrCodeBytes);
-        using var bitmap = new System.Drawing.Bitmap(memoryStream);
-        
-        // ALTERAÇÃO: Usar o nome completo da classe para evitar ambiguidade e a dependência do PresentationCore.
-        var reader = new ZXing.Windows.Compatibility.BarcodeReader();
-        
-        result = reader.Decode(bitmap);
-    #else
-        // --- Caminho para Linux, macOS, Android, etc. usando ImageSharp ---
-        using var memoryStream = new MemoryStream(qrCodeBytes);
-        using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.L8>(memoryStream);
-
-        // ALTERAÇÃO: Usar o nome completo da classe para resolver a ambiguidade.
-        var reader = new ZXing.ImageSharp.BarcodeReader<SixLabors.ImageSharp.PixelFormats.L8>();
-        
-        result = reader.Decode(image);
-    #endif
-
-        if (result != null && !string.IsNullOrEmpty(result.Text))
-        {
-            return result.Text;
-        }
-
-        throw new InvalidDataException("Não foi possível extrair conteúdo do QR Code a partir da imagem.");
     }
 }
 
