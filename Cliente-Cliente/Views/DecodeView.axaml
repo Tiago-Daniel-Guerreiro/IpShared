@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:IpShared.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="IpShared.Views.DecodeView"
+             x:DataType="vm:DecodeViewModel">
+    <Grid RowDefinitions="Auto,*,Auto" Margin="15">
+        <!-- Controlo -->
+        <StackPanel Grid.Row="0" Spacing="10">
+            <TextBlock Text="Obter IP a partir de um Convite" FontSize="18" FontWeight="Bold"/>
+            <TextBlock Text="Cole o código de convite (ou o conteúdo Base64 do QR Code):"/>
+            <TextBox Text="{Binding InviteCode}" Watermark="Insira o código aqui..."/>
+            <Button Content="Descodificar" Command="{Binding DecodeInvite}" Classes="accent"/>
+        </StackPanel>
+
+        <!-- Resultados -->
+        <Border Grid.Row="1" Margin="0,20,0,0" Padding="15" CornerRadius="5"
+                Background="{DynamicResource SystemControlPageBackgroundListLowBrush}"
+                IsVisible="{Binding DetectedFormat, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <StackPanel Spacing="10">
+                 <Grid ColumnDefinitions="150, *">
+                    <TextBlock Grid.Column="0" Text="Formato Detetado:" FontWeight="Bold"/>
+                    <TextBlock Grid.Column="1" Text="{Binding DetectedFormat}"/>
+                </Grid>
+                 <Grid ColumnDefinitions="150, *">
+                    <TextBlock Grid.Column="0" Text="Endereço IP:" FontWeight="Bold"/>
+                    <TextBlock Grid.Column="1" Text="{Binding DecodedIp}"/>
+                </Grid>
+                <Grid ColumnDefinitions="150, *">
+                    <TextBlock Grid.Column="0" Text="Porta:" FontWeight="Bold"/>
+                    <TextBlock Grid.Column="1" Text="{Binding DecodedPort}"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- Status -->
+        <Border Grid.Row="2" Background="{DynamicResource SystemControlPageBackgroundAltHighBrush}" CornerRadius="4" Padding="8">
+             <TextBlock Text="{Binding ResultMessage}" VerticalAlignment="Center"/>
+        </Border>
+    </Grid>
+</UserControl>

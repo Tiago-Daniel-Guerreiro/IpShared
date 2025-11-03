@@ -1,11 +1,11 @@
 ﻿namespace Invite_Generator.Refactored;
+
 using IpWordEncoder.Refactored;
 using QRCoder;
 using SIPSorcery.Net;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -15,8 +15,14 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ZXing;
-using ZXing.Windows.Compatibility;
-#if ANDROID
+
+// ALTERAÇÃO: Diretivas de compilação ajustadas para serem mais genéricas.
+#if WINDOWS
+    // Usings específicos para Windows
+    using System.Drawing;
+    using ZXing.Windows.Compatibility;
+#else
+    // Usings multiplataforma (Linux, macOS, Android, etc.)
     using SixLabors.ImageSharp;
     using SixLabors.ImageSharp.PixelFormats;
     using ZXing.ImageSharp;
@@ -471,19 +477,25 @@ public class InviteGenerator
         byte[] qrCodeBytes = Convert.FromBase64String(base64QrCode);
         Result? result;
 
-#if ANDROID
-        // --- Caminho para Android (e outras plataformas não-Windows) usando ImageSharp ---
-        using var memoryStream = new MemoryStream(qrCodeBytes);
-        using var image = Image.Load<L8>(memoryStream);
-        var reader = new BarcodeReader<L8>();
-        result = reader.Decode(image);
-#else
+    #if WINDOWS
         // --- Caminho para Windows usando System.Drawing.Bitmap ---
         using var memoryStream = new MemoryStream(qrCodeBytes);
-        using var bitmap = new Bitmap(memoryStream);
-        var reader = new BarcodeReader(); // ZXing.Net.Bindings.Windows.Compatibility
+        using var bitmap = new System.Drawing.Bitmap(memoryStream);
+        
+        // ALTERAÇÃO: Usar o nome completo da classe para evitar ambiguidade e a dependência do PresentationCore.
+        var reader = new ZXing.Windows.Compatibility.BarcodeReader();
+        
         result = reader.Decode(bitmap);
-#endif
+    #else
+        // --- Caminho para Linux, macOS, Android, etc. usando ImageSharp ---
+        using var memoryStream = new MemoryStream(qrCodeBytes);
+        using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.L8>(memoryStream);
+
+        // ALTERAÇÃO: Usar o nome completo da classe para resolver a ambiguidade.
+        var reader = new ZXing.ImageSharp.BarcodeReader<SixLabors.ImageSharp.PixelFormats.L8>();
+        
+        result = reader.Decode(image);
+    #endif
 
         if (result != null && !string.IsNullOrEmpty(result.Text))
         {

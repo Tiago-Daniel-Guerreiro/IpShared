@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:IpShared.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="IpShared.Views.GenerateView"
+             x:DataType="vm:GenerateViewModel">
+    <Design.DataContext>
+        <vm:GenerateViewModel />
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto,*,Auto" Margin="15">
+        <!-- Secção de Controlo -->
+        <StackPanel Grid.Row="0" Spacing="10">
+            <TextBlock Text="Gerar Convites a partir de um IP" FontSize="18" FontWeight="Bold"/>
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock Text="Porta:" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding Port}" Width="80"/>
+                <CheckBox Content="Usar IP Público (STUN)" IsChecked="{Binding UsePublicIp}"/>
+                <Button Content="Gerar Convites" Command="{Binding GenerateInvitesAsync}" Classes="accent"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Secção de Resultados -->
+        <ScrollViewer Grid.Row="1" Margin="0,15,0,0">
+            <StackPanel Spacing="15">
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" IsVisible="{Binding DefaultInvite, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Default:" FontWeight="Bold" Margin="0,0,10,0"/>
+                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding DefaultInvite}" IsReadOnly="True"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Base16 (Hex):" FontWeight="Bold" Margin="0,0,10,0"/>
+                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Base16Invite}" IsReadOnly="True"/>
+                    
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Base62:" FontWeight="Bold" Margin="0,0,10,0"/>
+                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Base62Invite}" IsReadOnly="True"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Formato Humano:" FontWeight="Bold" Margin="0,0,10,0"/>
+                    <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding HumanInvite}" IsReadOnly="True"/>
+                </Grid>
+
+                <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding QrCodeImage, Converter={x:Static ObjectConverters.IsNotNull}}">
+                     <TextBlock Text="QR Code:" FontWeight="Bold" VerticalAlignment="Center"/>
+                     <Image Source="{Binding QrCodeImage}" Width="150" Height="150" Margin="10"/>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Barra de Status -->
+        <Border Grid.Row="2" Background="{DynamicResource SystemControlPageBackgroundAltHighBrush}" CornerRadius="4" Padding="8">
+            <TextBlock Text="{Binding StatusMessage}" VerticalAlignment="Center"/>
+        </Border>
+    </Grid>
+</UserControl>
