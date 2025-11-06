@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<linker>
+  <!-- Preservar ViewModels e Views -->
+  <assembly fullname="IpShared">
+    <type fullname="IpShared.ViewModels.HostClientViewModel" preserve="all" />
+    <type fullname="IpShared.ViewModels.GenerateViewModel" preserve="all" />
+    <type fullname="IpShared.ViewModels.DecodeViewModel" preserve="all" />
+    <type fullname="IpShared.ViewModels.MainWindowViewModel" preserve="all" />
+    <type fullname="IpShared.ViewModels.ViewModelBase" preserve="all" />
+    <type fullname="IpShared.Views.HostClientView" preserve="all" />
+    <type fullname="IpShared.Views.GenerateView" preserve="all" />
+    <type fullname="IpShared.Views.DecodeView" preserve="all" />
+    <type fullname="IpShared.Views.MainWindow" preserve="all" />
+    <type fullname="IpShared.Views.QrCodeWindow" preserve="all" />
+    <type fullname="IpShared.App" preserve="all" />
+  </assembly>
+
+  <!-- Preservar classes de InviteGenerator -->
+  <assembly fullname="IpShared">
+    <type fullname="Invite_Generator.InviteGenerator" preserve="all" />
+    <type fullname="Invite_Generator.InviteFormat" preserve="all" />
+    <type fullname="Invite_Generator.NetworkHelper" preserve="all" />
+    <type fullname="Invite_Generator.DefaultConverter" preserve="all" />
+    <type fullname="Invite_Generator.Base16Converter" preserve="all" />
+    <type fullname="Invite_Generator.Base62Converter" preserve="all" />
+    <type fullname="Invite_Generator.WordsConverter" preserve="all" />
+    <type fullname="Invite_Generator.QrConverter" preserve="all" />
+    <type fullname="IpWordEncoder.WordEncoder" preserve="all" />
+    <type fullname="IpWordEncoder.WordEncoderConfig" preserve="all" />
+    <type fullname="IpWordEncoder.WordListLoader" preserve="all" />
+  </assembly>
+
+  <!-- Preservar Avalonia -->
+  <assembly fullname="Avalonia" preserve="all" />
+  <assembly fullname="Avalonia.ReactiveUI" preserve="all" />
+  <assembly fullname="Avalonia.Themes.Fluent" preserve="all" />
+
+  <!-- Preservar ReactiveUI -->
+  <assembly fullname="ReactiveUI" preserve="all" />
+
+  <!-- Preservar dependências de QR Code -->
+  <assembly fullname="QRCoder" preserve="all" />
+  <assembly fullname="ZXing.Net" preserve="all" />
+  <assembly fullname="ZXing.Net.Bindings.SkiaSharp" preserve="all" />
+  <assembly fullname="SkiaSharp" preserve="all" />
+  <assembly fullname="SIPSorcery" preserve="all" />
+</linker>

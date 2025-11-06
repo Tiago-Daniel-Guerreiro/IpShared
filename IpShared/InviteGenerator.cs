@@ -1,22 +1,92 @@
-﻿namespace Invite_Generator.Refactored;
+﻿namespace Invite_Generator;
 
-using IpWordEncoder.Refactored;
+using IpWordEncoder;
 using QRCoder;
 using SIPSorcery.Net;
+using SkiaSharp;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 using System.Numerics;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ZXing;
-using ZXing.Windows.Compatibility;
+using ZXing.SkiaSharp;
+
+public class NetworkHelper
+{
+    public static IPAddress? GetActiveIPv4Address()
+    {
+        // Separa todas as interfaces de rede ativas (não loopback, não túneis virtuais)
+        var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(ni => ni.OperationalStatus == OperationalStatus.Up && 
+                         ni.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                         ni.NetworkInterfaceType != NetworkInterfaceType.Tunnel &&
+                         !ni.Description.Contains("Virtual", StringComparison.OrdinalIgnoreCase) &&
+                         !ni.Description.Contains("VMware", StringComparison.OrdinalIgnoreCase) &&
+                         !ni.Description.Contains("VirtualBox", StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(ni => ni.Speed); // Prioriza interfaces mais rápidas
+
+        foreach (var ni in networkInterfaces)
+        {
+            var ipProperties = ni.GetIPProperties();
+            
+            // Uma interface só tem acesso à rede se tiver um gateway padrão
+            // No Android, GatewayAddresses não é suportado, então verificamos apenas se há IPs
+#if !ANDROID
+            if (ipProperties.GatewayAddresses.Count == 0)
+                continue;
+#endif
+
+            // Procura o endereço IPv4 associado da interface que tem um gateway padrão
+            var ipv4Address = ipProperties.UnicastAddresses
+                .FirstOrDefault(ua => ua.Address.AddressFamily == AddressFamily.InterNetwork && 
+                                      !IPAddress.IsLoopback(ua.Address) &&
+                                      !ua.Address.ToString().StartsWith("169.254.")); // Ignora APIPA
+
+            if (ipv4Address != null)
+            {
+                // Valida se o IP está em uma faixa privada comum (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+                var ipBytes = ipv4Address.Address.GetAddressBytes();
+                bool isPrivateNetwork = 
+                    (ipBytes[0] == 192 && ipBytes[1] == 168) ||  // 192.168.x.x
+                    (ipBytes[0] == 10) ||                         // 10.x.x.x
+                    (ipBytes[0] == 172 && ipBytes[1] >= 16 && ipBytes[1] <= 31); // 172.16-31.x.x
+
+                // Prioriza redes privadas comuns (mais provável ser a rede local real)
+                if (isPrivateNetwork)
+                    return ipv4Address.Address;
+            }
+        }
+
+        // Se não encontrou rede privada, retorna qualquer IP válido
+        foreach (var ni in networkInterfaces)
+        {
+            var ipProperties = ni.GetIPProperties();
+#if !ANDROID
+            if (ipProperties.GatewayAddresses.Count == 0)
+                continue;
+#endif
+
+            var ipv4Address = ipProperties.UnicastAddresses
+                .FirstOrDefault(ua => ua.Address.AddressFamily == AddressFamily.InterNetwork && 
+                                      !IPAddress.IsLoopback(ua.Address) &&
+                                      !ua.Address.ToString().StartsWith("169.254."));
+
+            if (ipv4Address != null)
+                return ipv4Address.Address;
+        }
+
+        return null; // Se nenhuma interface válida for encontrada
+    }
+}
 
 /// <summary>
 /// Enumeração para especificar o formato de convite desejado.
@@ -131,7 +201,8 @@ public class Base62Converter : IInviteConverter
         byte[] data = InviteHelpers.IpPortToBytes(ip, port);
         var number = new BigInteger(data, isUnsigned: true, isBigEndian: true);
 
-        if (number == 0) return Base62Charset[0].ToString();
+        if (number == 0) 
+            return Base62Charset[0].ToString();
 
         var sb = new StringBuilder();
         while (number > 0)
@@ -183,23 +254,51 @@ public class WordsConverter : IInviteConverter
     public WordsConverter()
     {
         // 1. Configurar o caminho para as listas de palavras.
-        // A biblioteca espera um caminho; aqui assumimos um diretório "Resources" relativo à execução.
+        // Tenta primeiro carregar dos recursos embutidos, depois do diretório físico
+        var encoderConfig = new WordEncoderConfig();
+
+        // Primeiro tenta carregar do diretório 'Resources' na saída (útil para builds locais/publish onde os arquivos foram copiados).
         string resourcePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources");
-        if (!Directory.Exists(resourcePath))
+        List<string[]> wordLists = new List<string[]>();
+        try
         {
-            // Se o diretório não existir, lança uma exceção clara.
-            // Para usar esta classe, é preciso garantir que o diretório "Resources" com os ficheiros "Words_X.txt" exista.
-            throw new DirectoryNotFoundException($"O diretório de recursos não foi encontrado no caminho esperado: '{resourcePath}'.");
+            if (Directory.Exists(resourcePath))
+            {
+                var fromDir = WordListLoader.LoadFromDirectory(resourcePath, encoderConfig.DictionaryWordCount);
+                if (fromDir != null && fromDir.Count > 0)
+                    wordLists = fromDir;
+            }
+        }
+        catch
+        {
+            // ignora e tenta fallback para recursos embutidos
         }
 
-        // 2. Instanciar a configuração e carregar as palavras usando o loader da biblioteca.
-        var encoderConfig = new WordEncoderConfig();
-        List<string[]> wordLists = WordListLoader.LoadFromDirectory(resourcePath, encoderConfig.DictionaryWordCount);
-
+        // Se não encontrou listas no disco, tenta carregar dos recursos embutidos no assembly
         if (wordLists.Count == 0)
         {
-            throw new InvalidOperationException("Nenhuma lista de palavras válida foi carregada. Verifique o conteúdo do diretório 'Resources'.");
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            var resourceNames = asm.GetManifestResourceNames()
+                .Where(n => n.IndexOf("words_", StringComparison.OrdinalIgnoreCase) >= 0 && n.EndsWith(".txt", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            foreach (var rn in resourceNames.OrderBy(n => n))
+            {
+                using var s = asm.GetManifestResourceStream(rn);
+                if (s == null) continue;
+                using var sr = new StreamReader(s, Encoding.UTF8);
+                var words = sr.ReadToEnd()
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(w => w.Trim())
+                    .Where(w => !string.IsNullOrEmpty(w))
+                    .ToArray();
+                if (words.Length > 0)
+                    wordLists.Add(words);
+            }
         }
+
+        if (wordLists.Count == 0)
+            throw new InvalidOperationException("Nenhuma lista de palavras válida foi carregada. Verifique os recursos embutidos ou o conteúdo do diretório 'Resources'.");
 
         // 3. Criar os mapas de palavras (word -> index) conforme a lógica da biblioteca.
         ReadOnlyCollection<Dictionary<string, int>> wordMaps = wordLists.Select(list =>
@@ -282,9 +381,7 @@ public class WordsConverter : IInviteConverter
 
             // A estratégia com porta deve sempre retornar uma porta. Se não o fizer, é um estado inesperado.
             if (!decodedPort.HasValue)
-            {
                 throw new InvalidOperationException("A descodificação resultou num valor de porta nulo, o que é inesperado para este formato.");
-            }
 
             return (decodedIp, decodedPort.Value);
         }
@@ -346,33 +443,16 @@ public class QrConverter : IInviteConverter
         var contentConverter = new DefaultConverter();
 
         if (contentConverter.IsFormat(content))
-        {
             return contentConverter.Decode(content);
-        }
 
         throw new System.FormatException($"O conteúdo do QR Code ('{content}') não está no formato esperado 'IP:Porta'.");
     }
 
     /// <summary>
-    /// MÉTODO DE DEPURAÇÃO: Tenta decodificar o QR Code e mostra cada passo numa MessageBox.
+    /// MÉTODO DE DEPURAÇÃO: Tenta decodificar o QR Code e mostra cada passo no console.
     /// </summary>
     public void DebugDecode(string inviteCode)
     {
-#if !WINDOWS
-        // MessageBox não está disponível em plataformas não-Windows por padrão.
-        // Poderíamos usar um evento ou outra forma de log aqui.
-        Console.WriteLine("O método de depuração com MessageBox só está implementado para Windows.");
-        try
-        {
-            var (ip, port) = Decode(inviteCode);
-            Console.WriteLine($"Sucesso: {ip}:{port}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Falha: {ex.Message}");
-        }
-        return;
-#else
         var log = new StringBuilder();
         log.AppendLine("--- Início da Depuração do QrConverter ---");
 
@@ -383,7 +463,7 @@ public class QrConverter : IInviteConverter
             if (!IsFormat(inviteCode))
             {
                 log.AppendLine("Resultado: FALHA. 'IsFormat' retornou false.");
-                MessageBox.Show(log.ToString(), "Depuração QrConverter", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Console.WriteLine(log.ToString());
                 return;
             }
             log.AppendLine("Resultado: SUCESSO. 'IsFormat' retornou true.");
@@ -396,19 +476,16 @@ public class QrConverter : IInviteConverter
             log.AppendLine();
 
             // Passo 3: Ler a imagem e extrair o conteúdo do QR Code
-            log.AppendLine("Passo 3: Lendo a imagem com ZXing para extrair o texto...");
+            log.AppendLine("Passo 3: Lendo a imagem com ZXing.SkiaSharp para extrair o texto...");
             string? qrContent = null;
             Result? zxingResult = null;
 
-            // A abordagem com MemoryStream às vezes pode ser problemática.
-            // Vamos tentar salvar em um arquivo temporário como alternativa de depuração se falhar.
             try
             {
                 using var memoryStream = new MemoryStream(qrCodeBytes);
-                // IMPORTANTE: Resetar a posição do stream para o início antes de ler.
                 memoryStream.Position = 0;
-                using var bitmap = new Bitmap(memoryStream);
-                var reader = new ZXing.Windows.Compatibility.BarcodeReader();
+                using var bitmap = SKBitmap.Decode(memoryStream);
+                var reader = new BarcodeReader();
                 zxingResult = reader.Decode(bitmap);
 
                 if (zxingResult != null)
@@ -417,14 +494,12 @@ public class QrConverter : IInviteConverter
                     log.AppendLine($"Resultado: SUCESSO. Texto extraído: '{qrContent}'");
                 }
                 else
-                {
                     log.AppendLine("Resultado: FALHA. 'reader.Decode(bitmap)' retornou null. A biblioteca não encontrou um QR Code na imagem.");
-                }
             }
             catch (Exception ex)
             {
                 log.AppendLine($"Resultado: FALHA CRÍTICA durante a leitura da imagem: {ex.GetType().Name} - {ex.Message}");
-                MessageBox.Show(log.ToString(), "Depuração QrConverter", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Console.WriteLine(log.ToString());
                 return;
             }
             log.AppendLine();
@@ -442,9 +517,7 @@ public class QrConverter : IInviteConverter
                     log.AppendLine($"Porta: {port}");
                 }
                 else
-                {
                     log.AppendLine($"Resultado: FALHA. O texto '{qrContent}' não corresponde ao formato 'IP:Porta'.");
-                }
             }
         }
         catch (Exception ex)
@@ -455,9 +528,8 @@ public class QrConverter : IInviteConverter
         }
         finally
         {
-            MessageBox.Show(log.ToString(), "Relatório de Depuração QrConverter", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Console.WriteLine(log.ToString());
         }
-#endif
     }
 
     private string DecodeContentFromBase64(string base64QrCode)
@@ -465,16 +537,14 @@ public class QrConverter : IInviteConverter
         byte[] qrCodeBytes = Convert.FromBase64String(base64QrCode);
         Result? result;
 
-        // Sempre usa a implementação Windows para evitar problemas com ImageSharp
         using var memoryStream = new MemoryStream(qrCodeBytes);
-        using var bitmap = new Bitmap(memoryStream);
-        var reader = new ZXing.Windows.Compatibility.BarcodeReader();
+        memoryStream.Position = 0;
+        using var bitmap = SKBitmap.Decode(memoryStream);
+        var reader = new BarcodeReader();
         result = reader.Decode(bitmap);
 
         if (result != null && !string.IsNullOrEmpty(result.Text))
-        {
             return result.Text;
-        }
 
         throw new InvalidDataException("Não foi possível extrair conteúdo do QR Code a partir da imagem fornecida (ZXing retornou null).");
     }
@@ -501,11 +571,21 @@ public class InviteGenerator
         {
             new QrConverter(),
             new DefaultConverter(),
-            new WordsConverter(), // Prioridade alta por ser distintivo (contém '-')
             new Base16Converter(),
             new Base62Converter()
             // Adicione novos conversores aqui. A ordem importa para a deteção.
         };
+
+        // WordsConverter pode falhar se o diretório Resources não for encontrado
+        try
+        {
+            AllConverters.Insert(2, new WordsConverter()); // Prioridade alta por ser distintivo (contém '-')
+        }
+        catch (Exception ex)
+        {
+            // Se falhar, apenas registra e continua sem o conversor de Words
+            System.Diagnostics.Debug.WriteLine($"Aviso: WordsConverter não foi inicializado: {ex.Message}");
+        }
     }
 
     private InviteGenerator(IPAddress ip, ushort port)
@@ -526,9 +606,8 @@ public class InviteGenerator
     {
         IPAddress? publicIp = await GetPublicIpAsync();
         if (publicIp == null)
-        {
             throw new InvalidOperationException("Não foi possível obter o endereço IP público. Verifique a conexão com a internet ou as configurações de firewall.");
-        }
+
         return new InviteGenerator(publicIp, port);
     }
 
@@ -565,9 +644,8 @@ public class InviteGenerator
         {
             // Para WordsConverter, usa o listId
             if (converter is WordsConverter wordsConverter)
-            {
                 return wordsConverter.Encode(_ip, _port, listId);
-            }
+
             return converter.Encode(_ip, _port);
         }
 
@@ -645,14 +723,13 @@ public class InviteGenerator
         pc.onicecandidate += (candidate) =>
         {
             if (candidate?.type == RTCIceCandidateType.srflx && IPAddress.TryParse(candidate.address, out var publicIp))
-            {
                 tcs.TrySetResult(publicIp);
-            }
         };
 
         pc.onicegatheringstatechange += (state) =>
         {
-            if (state == RTCIceGatheringState.complete) tcs.TrySetResult(null);
+            if (state == RTCIceGatheringState.complete) 
+                tcs.TrySetResult(null);
         };
 
         await pc.createDataChannel("dummy");
@@ -662,7 +739,8 @@ public class InviteGenerator
         var timeoutTask = Task.Delay(5000);
         var completedTask = await Task.WhenAny(tcs.Task, timeoutTask);
 
-        if (pc.connectionState != RTCPeerConnectionState.closed) pc.close();
+        if (pc.connectionState != RTCPeerConnectionState.closed) 
+            pc.close();
 
         return completedTask == tcs.Task ? await tcs.Task : null;
     }
@@ -681,7 +759,7 @@ internal static class InviteHelpers
         byte[] ipBytes = ip.GetAddressBytes();
         byte[] portBytes = BitConverter.GetBytes(port);
         if (BitConverter.IsLittleEndian) Array.Reverse(portBytes);
-        return ipBytes.Concat(portBytes).ToArray();
+            return ipBytes.Concat(portBytes).ToArray();
     }
 
     /// <summary>
@@ -689,7 +767,8 @@ internal static class InviteHelpers
     /// </summary>
     public static (IPAddress, ushort) BytesToIpPort(byte[] combinedBytes)
     {
-        if (combinedBytes.Length != 6) throw new ArgumentException("Os dados de entrada devem ter 6 bytes.", nameof(combinedBytes));
+        if (combinedBytes.Length != 6) 
+            throw new ArgumentException("Os dados de entrada devem ter 6 bytes.", nameof(combinedBytes));
 
         var ipBytes = new byte[4];
         var portBytes = new byte[2];

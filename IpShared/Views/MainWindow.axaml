@@ -8,21 +8,21 @@
         x:Class="IpShared.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="IpShared - Ferramenta para partilha de IPs"
-        Icon="/Assets/IpShared.png"
+        Icon="/Assets/IpShared.ico"
         Width="800" Height="600">
 
     <Design.DataContext>
         <vm:MainWindowViewModel/>
     </Design.DataContext>
     
-    <TabControl>
-        <TabItem Header="Gerar Convite">
+    <TabControl FontSize="14">
+        <TabItem Header="Codificar" FontSize="14">
             <views:GenerateView DataContext="{Binding GenerateVM}"/>
         </TabItem>
-        <TabItem Header="Descodificar Convite">
+        <TabItem Header="Descodificar" FontSize="14">
             <views:DecodeView DataContext="{Binding DecodeVM}"/>
         </TabItem>
-        <TabItem Header="Teste de Conexão">
+        <TabItem Header="Conexão" FontSize="14">
             <views:HostClientView DataContext="{Binding HostClientVM}"/>
         </TabItem>
     </TabControl>

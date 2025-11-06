@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" 
+          package="com.ipshared.app" 
+          android:versionCode="1" 
+          android:versionName="1.0">
+  
+  <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
+  
+  <!-- Permissões necessárias -->
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.CAMERA" />
+  
+  <application 
+  android:allowBackup="true"
+  android:label="IpShared"
+  android:icon="@drawable/ipshared"
+  android:supportsRtl="true"
+  android:hardwareAccelerated="true"
+  android:largeHeap="true"
+  android:theme="@style/MyTheme">
+    
+    <activity android:name="com.ipshared.app.MainActivity"
+              android:label="IpShared"
+              android:theme="@style/MyTheme.NoActionBar"
+              android:launchMode="singleTop"
+              android:configChanges="orientation|screenSize|uiMode"
+              android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+    
+  </application>
+  
+</manifest>

@@ -1,6 +1,6 @@
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
-using Invite_Generator.Refactored;
+using Invite_Generator;
 using ReactiveUI;
 using System;
 using System.IO;
@@ -13,7 +13,7 @@ namespace IpShared.ViewModels;
 
 public class GenerateViewModel : ViewModelBase
 {
-    private string _port = "60000";
+    private string _port = "8000";
     public string Port
     {
         get => _port;
@@ -21,9 +21,7 @@ public class GenerateViewModel : ViewModelBase
         {
             // Validação: apenas números e entre 0-65535
             if (string.IsNullOrEmpty(value) || (ushort.TryParse(value, out var p) && p <= 65535))
-            {
                 this.RaiseAndSetIfChanged(ref _port, value);
-            }
         }
     }
 
@@ -31,7 +29,31 @@ public class GenerateViewModel : ViewModelBase
     public bool UsePublicIp
     {
         get => _usePublicIp;
-        set => this.RaiseAndSetIfChanged(ref _usePublicIp, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _usePublicIp, value);
+            // Quando ativamos IP público, desativamos automaticamente a opção de IP local
+            if (value)
+                UseLocalIp = false;
+            // Notifica mudança na disponibilidade das opções locais
+            this.RaisePropertyChanged(nameof(LocalOptionsEnabled));
+        }
+    }
+
+    // Helper para ativar/desativar opções locais quando UsePublicIp está ativo
+    public bool LocalOptionsEnabled => !_usePublicIp;
+
+    // Detecta se está rodando em mobile (Android/iOS) para a UI poder mostrar opções nativas
+    public bool IsMobile
+    {
+        get
+        {
+#if ANDROID || IOS
+            return true;
+#else
+            return false;
+#endif
+        }
     }
 
     private string _fixedIp = "127.0.0.1";
@@ -42,9 +64,7 @@ public class GenerateViewModel : ViewModelBase
         {
             // Validação: formato IP válido
             if (string.IsNullOrEmpty(value) || IsValidIpFormat(value))
-            {
                 this.RaiseAndSetIfChanged(ref _fixedIp, value);
-            }
         }
     }
 
@@ -56,9 +76,9 @@ public class GenerateViewModel : ViewModelBase
         {
             this.RaiseAndSetIfChanged(ref _useLocalIp, value);
             if (value)
-            {
                 LoadLocalIp();
-            }
+            else
+                FixedIp = "127.0.0.1"; // Ao desativar, voltar para 127.0.0.1 (editável)
         }
     }
 
@@ -69,9 +89,7 @@ public class GenerateViewModel : ViewModelBase
         set
         {
             if (value >= 0 && value <= 15)
-            {
                 this.RaiseAndSetIfChanged(ref _dictionaryId, value);
-            }
         }
     }
 
@@ -93,17 +111,13 @@ public class GenerateViewModel : ViewModelBase
             
             // Atualiza o DictionaryId apenas se for um número válido
             if (string.IsNullOrWhiteSpace(value))
-            {
                 _dictionaryId = 0; // Default para 0 quando vazio
-            }
             else if (int.TryParse(value, out var id) && id >= 0 && id <= 15)
-            {
                 _dictionaryId = id;
-            }
         }
     }
 
-    private string _statusMessage = "Pronto para gerar convites.";
+    private string _statusMessage = "Pronto para codificar convites.";
     public string StatusMessage
     {
         get => _statusMessage;
@@ -132,7 +146,7 @@ public class GenerateViewModel : ViewModelBase
     public async Task GenerateInvitesAsync()
     {
         ClearResults();
-        StatusMessage = "A gerar convites, por favor aguarde...";
+            StatusMessage = "A codificar convites, por favor aguarde...";
 
         if (!ushort.TryParse(Port, out var portNumber))
         {
@@ -150,7 +164,7 @@ public class GenerateViewModel : ViewModelBase
             }
             else if (UseLocalIp)
             {
-                var localIp = GetLocalIpAddress();
+                var localIp = NetworkHelper.GetActiveIPv4Address();
                 if (localIp == null)
                 {
                     StatusMessage = "Erro: Não foi possível obter o IP local.";
@@ -183,7 +197,7 @@ public class GenerateViewModel : ViewModelBase
             var imageBytes = Convert.FromBase64String(base64Qr);
             using (var ms = new MemoryStream(imageBytes))
             {
-                QrCodeImage = new Bitmap(ms);
+                QrCodeImage = Bitmap.DecodeToWidth(ms, 300);
             }
             
             StatusMessage = "Convites gerados com sucesso!";
@@ -198,42 +212,27 @@ public class GenerateViewModel : ViewModelBase
     private bool IsValidIpFormat(string ip)
     {
         var parts = ip.Split('.');
-        if (parts.Length > 4) return false;
+        if (parts.Length > 4) 
+            return false;
         
         foreach (var part in parts)
         {
-            if (string.IsNullOrEmpty(part)) continue;
-            if (!byte.TryParse(part, out var num)) return false;
-            if (num > 255) return false;
+            if (string.IsNullOrEmpty(part)) 
+                continue;
+            if (!byte.TryParse(part, out var num)) 
+                return false;
+            if (num > 255) 
+                return false;
         }
         
         return true;
     }
 
-    private IPAddress? GetLocalIpAddress()
-    {
-        try
-        {
-            var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
-            foreach (var ip in host.AddressList)
-            {
-                if (ip.AddressFamily == AddressFamily.InterNetwork)
-                {
-                    return ip;
-                }
-            }
-        }
-        catch { }
-        return null;
-    }
-
     private void LoadLocalIp()
     {
-        var localIp = GetLocalIpAddress();
+        var localIp = NetworkHelper.GetActiveIPv4Address();
         if (localIp != null)
-        {
             FixedIp = localIp.ToString();
-        }
     }
 
     private void ClearResults()

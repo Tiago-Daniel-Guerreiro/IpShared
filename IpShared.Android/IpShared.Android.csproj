@@ -1,0 +1,75 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-android</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationId>com.ipshared.app</ApplicationId>
+    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+    <SupportedOSPlatformVersion>21.0</SupportedOSPlatformVersion>
+    <AndroidApplication>true</AndroidApplication>
+    <UseInterpreter>false</UseInterpreter>
+    <AndroidEnableProfiledAot>false</AndroidEnableProfiledAot>
+    <RunAOTCompilation>false</RunAOTCompilation>
+    <PublishTrimmed>false</PublishTrimmed>
+    <AndroidManifestMerger>manifestmerger.jar</AndroidManifestMerger>
+    <AndroidCreatePackagePerAbi>false</AndroidCreatePackagePerAbi>
+    <AndroidGenerateJniMarshalMethods>false</AndroidGenerateJniMarshalMethods>
+    <AndroidLinkMode>None</AndroidLinkMode>
+    <AndroidSdkDirectory>C:\Android</AndroidSdkDirectory>
+    <DefineConstants>$(DefineConstants);ANDROID</DefineConstants>
+    <!-- Suprime avisos de compatibilidade -->
+    <CheckEolTargetFramework>false</CheckEolTargetFramework>
+    <NoWarn>$(NoWarn);NETSDK1138;NETSDK1202;MSB3277;CA1416</NoWarn>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+    <!-- Otimizações de análise -->
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Android" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.10" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.0.10" />
+    <PackageReference Include="Avalonia.ReactiveUI" Version="11.0.10" />
+    <PackageReference Include="QRCoder" Version="1.7.0" />
+    <PackageReference Include="SIPSorcery" Version="8.0.23" />
+    <PackageReference Include="SkiaSharp" Version="3.116.1" />
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
+    <PackageReference Include="ZXing.Net.Bindings.SkiaSharp" Version="0.16.20" />
+  </ItemGroup>
+
+  <!-- Inclui arquivos do projeto compartilhado como links -->
+  <ItemGroup>
+    <Compile Include="..\IpShared\**\*.cs" Exclude="..\IpShared\obj\**;..\IpShared\bin\**;..\IpShared\Program.cs">
+      <Link>Shared\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Compile>
+    <AvaloniaXaml Include="..\IpShared\**\*.axaml" Exclude="..\IpShared\obj\**;..\IpShared\bin\**">
+      <Link>Shared\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <SubType>Designer</SubType>
+    </AvaloniaXaml>
+  </ItemGroup>
+
+  <!-- Removed copying all shared Resources into Android assets to avoid unnecessary files being packaged. -->
+
+  <!-- Incluir o PNG do projeto compartilhado como recurso drawable para usar como ícone -->
+  <ItemGroup>
+    <AndroidResource Include="..\IpShared\Assets\IpShared.png">
+      <Link>Resources\drawable\ipshared.png</Link>
+    </AndroidResource>
+  </ItemGroup>
+
+  <!-- Embutir as listas de palavras para o WordsConverter funcionar em Android -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\IpShared\Resources\Words_*.txt">
+      <Link>Resources\Words_%(Filename)%(Extension)</Link>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Resources\" />
+  </ItemGroup>
+
+</Project>

@@ -1,4 +1,4 @@
-﻿namespace IpWordEncoder.Refactored;
+﻿namespace IpWordEncoder;
 
 using System;
 using System.Collections;
@@ -9,6 +9,8 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading;
+using System.Net.NetworkInformation;
+using System.Net.Sockets;
 
 /// <summary>
 /// Define os modos de codificação possíveis.
@@ -354,6 +356,16 @@ public static class WordListLoader
 
         for (int id = 0; id < maxId; id++)
         {
+            // Tenta carregar do recurso embutido primeiro
+            string[]? words = LoadFromEmbeddedResource(id, requiredWordCount);
+            
+            if (words != null)
+            {
+                loadedLists.Add(words);
+                continue;
+            }
+
+            // Fallback: tenta carregar do sistema de arquivos
             string filePath = Path.Combine(path, $"Words_{id}.txt");
             if (!File.Exists(filePath))
             {
@@ -362,7 +374,7 @@ public static class WordListLoader
             }
             try
             {
-                string[] words = File.ReadAllLines(filePath)
+                words = File.ReadAllLines(filePath)
                     .Where(line => !string.IsNullOrWhiteSpace(line))
                     .Select(line => line.Trim().ToLowerInvariant())
                     .Take(requiredWordCount)
@@ -379,6 +391,44 @@ public static class WordListLoader
             }
         }
         return loadedLists;
+    }
+
+    private static string[]? LoadFromEmbeddedResource(int id, int requiredWordCount)
+    {
+        try
+        {
+            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            // Alguns targets (ex: Android) podem ter nomes de recursos diferentes (namespace alterado pelo linker/projeto).
+            // Procuramos qualquer resource cujo nome termine com 'Words_{id}.txt' (case-insensitive) para maior robustez.
+            string? resourceName = assembly.GetManifestResourceNames()
+                .FirstOrDefault(n => n.EndsWith($"Words_{id}.txt", StringComparison.OrdinalIgnoreCase));
+
+            if (resourceName == null)
+                return null;
+
+            using var stream = assembly.GetManifestResourceStream(resourceName);
+            if (stream == null)
+                return null;
+
+            using var reader = new StreamReader(stream);
+            var words = new List<string>();
+            
+            string? line;
+            while ((line = reader.ReadLine()) != null && words.Count < requiredWordCount)
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                    words.Add(line.Trim().ToLowerInvariant());
+            }
+
+            if (words.Count == requiredWordCount && words.Distinct(StringComparer.InvariantCultureIgnoreCase).Count() == words.Count)
+                return words.ToArray();
+                
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
 

@@ -9,35 +9,38 @@
     <Grid RowDefinitions="Auto,*,Auto" Margin="15">
         <!-- Controlo -->
         <StackPanel Grid.Row="0" Spacing="10">
-            <TextBlock Text="Obter IP a partir de um Convite" FontSize="16" FontWeight="Bold"/>
-            <TextBlock Text="Cole o código de convite (ou o conteúdo Base64 do QR Code):"/>
-            <TextBox Text="{Binding InviteCode}" Watermark="Insira o código aqui..."/>
-            <Button Content="Descodificar" Command="{Binding DecodeInvite}" Classes="accent"/>
+            <TextBlock Text="Obter IP a partir de um Convite" FontSize="16" FontWeight="Bold" Margin="0,0,0,5"/>
+            <TextBlock Text="Introduza o código de convite:" FontSize="14" Margin="0,0,0,5"/>
+            <TextBox Name="InviteCodeTextBox" Text="{Binding InviteCode}" Watermark="Insira o código aqui..." AcceptsReturn="False" GotFocus="OnInputGotFocus" PointerPressed="OnTextBoxAuto"/>
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="Descodificar" Command="{Binding DecodeInvite}" Classes="accent"/>
+                <Button Content="Escanear QR Code" Command="{Binding ScanQrCode}" IsVisible="{Binding IsMobile}"/>
+            </StackPanel>
         </StackPanel>
 
         <!-- Resultados -->
         <Border Grid.Row="1" Margin="0,20,0,0" Padding="15" CornerRadius="5"
                 Background="{DynamicResource SystemControlPageBackgroundListLowBrush}"
                 IsVisible="{Binding DetectedFormat, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <StackPanel Spacing="10">
+            <StackPanel Spacing="12">
                  <Grid ColumnDefinitions="150, *">
-                    <TextBlock Grid.Column="0" Text="Formato Detetado:" FontWeight="Bold"/>
-                    <TextBlock Grid.Column="1" Text="{Binding DetectedFormat}"/>
+                    <TextBlock Grid.Column="0" Text="Formato Detetado:" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Grid.Column="1" Text="{Binding DetectedFormat}" FontSize="14"/>
                 </Grid>
                  <Grid ColumnDefinitions="150, *">
-                    <TextBlock Grid.Column="0" Text="Endereço IP:" FontWeight="Bold"/>
-                    <TextBlock Grid.Column="1" Text="{Binding DecodedIp}"/>
+                    <TextBlock Grid.Column="0" Text="Endereço IP:" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Grid.Column="1" Text="{Binding DecodedIp}" FontSize="14"/>
                 </Grid>
                 <Grid ColumnDefinitions="150, *">
-                    <TextBlock Grid.Column="0" Text="Porta:" FontWeight="Bold"/>
-                    <TextBlock Grid.Column="1" Text="{Binding DecodedPort}"/>
+                    <TextBlock Grid.Column="0" Text="Porta:" FontWeight="Bold" FontSize="14"/>
+                    <TextBlock Grid.Column="1" Text="{Binding DecodedPort}" FontSize="14"/>
                 </Grid>
             </StackPanel>
         </Border>
 
         <!-- Status -->
-        <Border Grid.Row="2" Background="{DynamicResource SystemControlPageBackgroundAltHighBrush}" CornerRadius="4" Padding="8">
-             <TextBlock Text="{Binding ResultMessage}" VerticalAlignment="Center"/>
+        <Border Grid.Row="2" Background="{DynamicResource SystemControlPageBackgroundAltHighBrush}" CornerRadius="4" Padding="8" Margin="0,10,0,0">
+             <TextBlock Text="{Binding ResultMessage}" VerticalAlignment="Center" FontSize="14" TextWrapping="Wrap"/>
         </Border>
     </Grid>
 </UserControl>
