@@ -1,4 +1,4 @@
-# # IpShared - Partilha Fácil de Endereços IP
+# IpShared - Partilha Fácil de Endereços IP
 
 ![Language](https://img.shields.io/badge/C%23-Avalonia%20UI-blueviolet.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-green.svg)
