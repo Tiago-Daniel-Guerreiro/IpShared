@@ -1,4 +1,4 @@
-# IpShared - Partilha Fácil de Endereços IP
+# IpShared (Partilha de Endereços IP)
 
 ![Language](https://img.shields.io/badge/C%23-Avalonia%20UI-blueviolet.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-green.svg)
@@ -16,9 +16,8 @@ A aplicação converte um par IP/Porta em formatos "humanos" (como uma sequênci
 
 ## 🎯 Objetivo Principal
 Este projeto foi guiado por alguns objetivos claros:
-1.  **Criar uma Ferramenta Útil:** O objetivo principal foi construir uma aplicação funcional e autónoma que resolvesse um problema real e que pudesse ser usada para apoiar outros projetos.
-2.  **Exploração Tecnológica:** O projeto foi um campo de testes para aprender os fundamentos do Avalonia UI, do desenvolvimento multiplataforma e para aprofundar conhecimentos em **manipulação de bits e algoritmos de codificação**.
-3.  **Validação do Algoritmo:** A aplicação serviu como um ambiente real para implementar e testar o algoritmo de conversão de dados, que é o núcleo da ferramenta.
+-  **Criar uma Ferramenta Útil:** O objetivo principal foi construir uma aplicação funcional e autónoma que resolvesse um problema real e que pudesse ser usada para apoiar outros projetos.-  **Exploração Tecnológica:** O projeto foi um campo de testes para aprender os fundamentos do Avalonia UI, do desenvolvimento multiplataforma e para aprofundar conhecimentos em **manipulação de bits e algoritmos de codificação**.
+-  **Validação do Algoritmo:** A aplicação serviu como um ambiente real para implementar e testar o algoritmo de conversão de dados, que é o núcleo da ferramenta.
 
 ## ✔️ A Solução
 IpShared oferece uma interface simples para converter um par IP/Porta em vários formatos otimizados para partilha, cada um com um propósito específico:
@@ -31,12 +30,11 @@ A lógica de conversão está isolada da UI. A secção abaixo detalha a arquite
 
 ## ⚙️ Como Funciona: A Codificação do Formato "Words"
 O verdadeiro desafio técnico do IpShared foi criar um algoritmo capaz de empacotar de forma reversível 52 bits de dados (32 do IP, 16 da Porta e 4 do ID do Idioma) numa sequência de 5 palavras. Isto foi alcançado através de uma combinação de interleaving e codificação de metadados via capitalização:
-1.  **Codificação do ID do Idioma (4 bits):** Os 4 bits que identificam a lista de palavras (permitindo até 16 idiomas) são codificados de forma subtil na **capitalização da primeira letra das primeiras quatro palavras**. Um `1` torna a letra maiúscula; um `0` mantém-na minúscula.
-2.  **Codificação dos Metadados da Porta (3 bits):** Parte da informação da porta (os 3 bits menos significativos) é codificada na **capitalização das letras da última palavra**. Um padrão de maiúsculas/minúsculas (ex: `PoTe`) representa diretamente esses bits, permitindo reconstruir parte da porta sem usar espaço extra.
-3.  **Empacotamento dos Dados Restantes:** Os dados restantes – 32 bits do IP e 13 bits da porta – são combinados e divididos em "chunks" de 9 bits.
-4.  **Mapeamento para Palavras:** Cada "chunk" de 9 bits corresponde a um índice num dicionário de 512 palavras (`2^9`), resultando na sequência final de 5 palavras.
+-  **Codificação do ID do Idioma (4 bits):** Os 4 bits que identificam a lista de palavras (permitindo até 16 idiomas) são codificados de forma subtil na **capitalização da primeira letra das primeiras quatro palavras**. Um `1` torna a letra maiúscula; um `0` mantém-na minúscula.
+-  **Codificação dos Metadados da Porta (3 bits):** Parte da informação da porta (os 3 bits menos significativos) é codificada na **capitalização das letras da última palavra**. Um padrão de maiúsculas/minúsculas (ex: `PoTe`) representa diretamente esses bits, permitindo reconstruir parte da porta sem usar espaço extra.
+-  **Empacotamento dos Dados Restantes:** Os dados restantes – 32 bits do IP e 13 bits da porta – são combinados e divididos em "chunks" de 9 bits.
+-  **Mapeamento para Palavras:** Cada "chunk" de 9 bits corresponde a um índice num dicionário de 512 palavras (`2^9`), resultando na sequência final de 5 palavras.
 
-Este método garante que toda a informação necessária é contida numa string curta, legível e robusta, otimizada para comunicação verbal e manual.
 Esta abordagem introduz uma **dificuldade conhecida**: a partilha verbal pode tornar-se mais complexa, especialmente ao ditar o padrão de capitalização da última palavra. No entanto, foi uma decisão de design deliberada. As alternativas seriam adicionar uma sexta palavra (comprometendo a brevidade) ou limitar significativamente o intervalo de portas suportado. Optei por esta solução por considerar que a dificuldade de verbalização ocorre apenas em casos específicos, enquanto os benefícios de manter uma string de 5 palavras e suportar toda a gama de portas são permanentes.
 
 ## 👤 Meu Papel
@@ -51,7 +49,7 @@ Fui responsável por todo o processo: desde a **identificação da necessidade**
 
 ## ✅ Resultados
 - **Protótipo Funcional:** A aplicação está totalmente funcional em Windows e Android, validando a viabilidade da ideia e da tecnologia escolhida.
-- **Aprendizagem Acelerada:** O projeto foi uma excelente plataforma para aprender na prática os conceitos do Avalonia UI e do desenvolvimento multiplataforma em .NET.
+- **Aprendizagem Acelerada:** O projeto foi uma excelente plataforma para aprender na prática os conceitos do Avalonia UI, do desenvolvimento multiplataforma em .NET e para aprofundar conhecimentos em **algoritmos de codificação e manipulação de bits a baixo nível**.
 - **Visão Realista sobre IA em UI:** A experiência proporcionou uma visão clara das capacidades e (atuais) limitações da IA na geração de interfaces, mostrando que a supervisão e intervenção de um desenvolvedor ainda são essenciais.
 
 ## 🔮 Próximos Passos
