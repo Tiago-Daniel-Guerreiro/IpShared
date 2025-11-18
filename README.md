@@ -1,23 +1,24 @@
-# IpShared - Partilha Fácil de Endereços IP
+# # IpShared - Partilha Fácil de Endereços IP
+
 ![Language](https://img.shields.io/badge/C%23-Avalonia%20UI-blueviolet.svg)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Android-green.svg)
-![Status](https://img.shields.io/badge/Status-Protótipo%20Funcional-orange)
+![Status](https://img.shields.io/badge/Status-Ferramenta%20Funcional-orange)
 
-IpShared é uma ferramenta multiplataforma desenvolvida para simplificar a partilha de endereços IP. A aplicação converte um IP numérico tradicional em formatos alternativos e mais "humanos", como uma sequência de cinco palavras fáceis de ditar, uma string compacta em Base92 em Qr Code ou em outros formatos suportados, reduzindo a probabilidade de erros de transcrição.
+Este projeto nasceu de uma necessidade que antecipei para um projeto futuro maior. Decidi criar o IpShared como uma ferramenta independente para resolver o problema de partilhar endereços IP e, ao mesmo tempo, aproveitar a oportunidade para explorar o desenvolvimento multiplataforma com **C#** e **Avalonia UI**.
 
-Este projeto foi também uma oportunidade para explorar o desenvolvimento de aplicações multiplataforma com **C#** e **Avalonia UI**.
+A aplicação converte um par IP/Porta em formatos "humanos" (como uma sequência de palavras) ou compactos, simplificando a sua partilha e reduzindo erros na partilha.
 
 ## 🚀 Tecnologias Utilizadas
 - **Linguagem:** C#
 - **Framework de UI:** Avalonia UI (para suporte nativo a Windows, Android, e potencialmente Linux)
-- **IDE:** Visual Code
 - **Controle de Versões:** Git e GitHub
 - **Extra:** A base da UI foi gerada experimentalmente com **Inteligência Artificial**, servindo como um estudo de caso sobre as suas capacidades e limitações atuais no desenvolvimento de interfaces.
 
 ## 🎯 Objetivo Principal
-O objetivo era duplo:
-1.  **Resolver um problema prático:** Criar uma ferramenta que tornasse a partilha de endereços IP menos propensa a erros, especialmente em contextos de suporte técnico ou comunicação verbal.
-2.  **Aprender uma nova tecnologia:** Aprende sobre o desenvolvimento de aplicações desktop e mobile com uma única base de código, utilizando o framework Avalonia UI.
+Este projeto foi guiado por alguns objetivos claros:
+1.  **Criar uma Ferramenta Útil:** O objetivo principal foi construir uma aplicação funcional e autónoma que resolvesse um problema real e que pudesse ser usada para apoiar outros projetos.
+2.  **Exploração Tecnológica:** O projeto foi um campo de testes para aprender os fundamentos do Avalonia UI, do desenvolvimento multiplataforma e para aprofundar conhecimentos em **manipulação de bits e algoritmos de codificação**.
+3.  **Validação do Algoritmo:** A aplicação serviu como um ambiente real para implementar e testar o algoritmo de conversão de dados, que é o núcleo da ferramenta.
 
 ## ✔️ A Solução
 IpShared oferece uma interface simples para converter um par IP/Porta em vários formatos otimizados para partilha, cada um com um propósito específico:
@@ -39,7 +40,9 @@ Este método garante que toda a informação necessária é contida numa string 
 Esta abordagem introduz uma **dificuldade conhecida**: a partilha verbal pode tornar-se mais complexa, especialmente ao ditar o padrão de capitalização da última palavra. No entanto, foi uma decisão de design deliberada. As alternativas seriam adicionar uma sexta palavra (comprometendo a brevidade) ou limitar significativamente o intervalo de portas suportado. Optei por esta solução por considerar que a dificuldade de verbalização ocorre apenas em casos específicos, enquanto os benefícios de manter uma string de 5 palavras e suportar toda a gama de portas são permanentes.
 
 ## 👤 Meu Papel
-Fui o único desenvolvedor do projeto, responsável por todas as fases: desde a concepção da ideia e o desenvolvimento do algoritmo de conversão, até à implementação da aplicação e, crucialmente, a refatoração e correção da interface gerada por IA.
+Neste projeto, o meu papel foi o de antecipar uma necessidade que teria em um projeto futuro. Em vez de esperar que a partilha de IPs se tornasse um problema, decidi construir uma solução antes do tempo, criando esta ferramenta.
+
+Fui responsável por todo o processo: desde a **identificação da necessidade** e o **design da solução**, até à **implementação do algoritmo de codificação de dados** e ao **desenvolvimento da UI** que constitui a própria ferramenta. Este projeto mostra a minha forma de trabalhar: construir não só as aplicações, mas também as ferramentas que as suportam.
 
 ## ⚙️ Principais Desafios
 - **Curva de Aprendizagem do Avalonia UI:** Embora semelhante a outros frameworks XAML, o Avalonia tem particularidades na configuração de projetos multiplataforma e na gestão de layouts responsivos.
